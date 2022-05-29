@@ -110,9 +110,9 @@ def exec(cfg: DictConfig) -> None:
         trainer.set_dataloader_keys('val', list(data_loaders['val'].keys()))
         trainer.set_dataloader_keys('test', list(data_loaders['test'].keys()))
 
-        # pl_trainer.fit(trainer,
-        #                train_dataloaders=data_loaders['train'],
-        #                val_dataloaders=list(data_loaders['val'].values()))
+        pl_trainer.fit(trainer,
+                       train_dataloaders=data_loaders['train'],
+                       val_dataloaders=list(data_loaders['val'].values()))
         pl_trainer.test(trainer, list(data_loaders['test'].values()))
 
     #
