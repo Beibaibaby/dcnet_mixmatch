@@ -189,12 +189,10 @@ class OccamResNet(nn.Module):
                  # Exits
                  exit_out_dims=None,  # For classification, this is the num_classes
                  exit_seq_nums=[0, 1, 2, 3],  # Block sequences where the exits are attached
-                 exit_type=MultiPoolGatedCAM,
+                 exit_type=ExitModule,
                  exit_initial_conv_type=Conv2,
                  relative_pool_sizes=[1],
                  exit_gate_type=SimpleGate,
-                 # exit_bottleneck_factor=4,
-                 # cam_bottleneck_factor=1,
                  inference_earliest_exit_ix=1,
                  cascaded_exits=False,
                  exit_scale_factors=[1, 1, 1, 1],

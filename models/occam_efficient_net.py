@@ -67,7 +67,7 @@ class OccamEfficientNet(nn.Module):
             relative_pool_sizes=[1],
             exit_out_dims=None,
             exit_seq_nums=[2, 4, 6, 8],
-            exit_type=MultiPoolGatedCAM,
+            exit_type=ExitModule,
             exit_gate_type=SimpleGate,
             exit_initial_conv_type=Conv2,
             exit_bottleneck_factor=4,
