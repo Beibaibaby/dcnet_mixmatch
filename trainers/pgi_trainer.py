@@ -23,7 +23,8 @@ class PGITrainer(BaseTrainer):
     def training_step(self, batch, batch_idx):
         logits = self(batch['x'])
         main_loss = self.compute_loss(logits, batch['y'])
-        inv_loss = self.calc_invariance_loss(logits, batch['y'], batch, batch_idx)
+        iter = self.current_epoch * self.iters_per_epoch + batch_idx + 1
+        inv_loss = self.calc_invariance_loss(logits, batch['y'], batch, iter)
         self.log('loss', main_loss, on_epoch=True, batch_size=self.config.dataset.batch_size)
         self.log('inv_loss', inv_loss, on_epoch=True, batch_size=self.config.dataset.batch_size)
         opt = self.optimizers()
@@ -33,13 +34,13 @@ class PGITrainer(BaseTrainer):
         self.manual_backward(main_loss)
         opt.step()
 
-    def calc_invariance_loss(self, logits, gt_ys, batch, batch_idx, eps=1e-12):
+    def calc_invariance_loss(self, logits, gt_ys, batch, iter, eps=1e-12):
 
         unq_ys = torch.unique(gt_ys)
         batch_grp_ixs = batch['group_ix']
         inv_loss = 0
         invariance_loss_wt = self.trainer_cfg.invariance_loss_wt_coeff * min(1.0, 1.0 * (
-                    self.current_epoch + 1) / self.config.optimizer.epochs)
+            iter) / (self.config.optimizer.epochs * self.iters_per_epoch))
         for unq_y in unq_ys:
             # Compute the loss for each class in the batch as long as both majority and minority groups
             # are present in the batch

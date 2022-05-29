@@ -294,7 +294,3 @@ def resnet18_img64(num_classes):
     return resnet18vw(3, 64, num_classes=num_classes,
                       initial_kernel_size=3, initial_stride=1, initial_padding=1,
                       use_initial_max_pooling=False)
-
-
-def coco_resnet_img64(num_classes):
-    return coco_resnetvw(3, 64, num_classes=num_classes, width_factors=[1, 2, 4, 4])

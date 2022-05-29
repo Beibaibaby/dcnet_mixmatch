@@ -84,3 +84,6 @@ class BaseTrainer(pl.LightningModule):
 
     def get_dataloader_keys(self, split):
         return getattr(self, f'{split}_dataloader_keys')
+
+    def set_iters_per_epoch(self, iters_per_epoch):
+        self.iters_per_epoch = iters_per_epoch
