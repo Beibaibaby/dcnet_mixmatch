@@ -27,10 +27,9 @@ class BaseTrainer(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop. It is independent of forward
-        if batch_idx == 1:
-            sch = self.lr_schedulers()
-        model_out = self(batch['x'])
-        loss = self.compute_loss(model_out, batch['y'])
+        logits = self(batch['x'])
+        loss = self.compute_loss(logits, batch['y'])
+        self.log('loss', loss, on_epoch=True, batch_size=self.config.dataset.batch_size)
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx):

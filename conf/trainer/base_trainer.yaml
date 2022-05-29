@@ -2,7 +2,7 @@ name: BaseTrainer
 alias: ${trainer.name}
 #save_model_every: ${optimizer.epochs}
 #save_predictions_every: ${optimizer.epochs}
-#test_every: 10
+check_val_every_n_epoch: 10
 #test_epochs: null
 #early_stopping_split: 'Val' # Saves a checkpoint with best accuracy on this split
 #classification_loss_wt: 1.0
