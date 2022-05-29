@@ -11,5 +11,6 @@ pip install hydra-core --upgrade
 pip install hydra-joblib-launcher --upgrade
 conda install --yes -c anaconda pyyaml
 
-# Check results
+# Analysis/results
 pip install tensorboard
+pip install torch-summary

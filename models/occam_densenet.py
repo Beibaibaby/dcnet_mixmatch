@@ -1,8 +1,6 @@
-import torchvision
 from torchvision.models.densenet import *
 from models.occam_lib import *
 from torchvision.models.densenet import _DenseBlock
-from typing import Any, List, Tuple
 
 
 class OccamDenseNet(DenseNet):
@@ -33,21 +31,6 @@ class OccamDenseNet(DenseNet):
         self.exits_cfg = exits_kwargs
         # Delete the classifier created by super class
         del self.classifier
-
-        # Create multiple exits
-        # def _build_exit(in_dims):
-        #     return exit_type(
-        #         in_dims=in_dims,
-        #         hid_dims=max(in_dims // exit_bottleneck_factor, 16),
-        #         cam_hid_dims=max(in_dims // exit_bottleneck_factor, 16),
-        #         out_dims=exit_out_dims,
-        #         relative_pool_sizes=relative_pool_sizes,
-        #         inference_relative_pool_sizes=relative_pool_sizes,
-        #         gate_type=exit_gate_type,
-        #         cascaded=False,
-        #         initial_conv_type=exit_initial_conv_type
-        #     )
-        #
 
         multi_exit = MultiExitModule(**exits_kwargs)
         for layer in self.features:
