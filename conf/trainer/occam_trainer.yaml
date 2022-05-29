@@ -1,0 +1,94 @@
+defaults:
+  - base_trainer
+name: OccamTrainer
+weight_type: 'gate'
+weight_norm_type: 'max' # per_class_max
+use_learned_loss_wts: False
+#main_loss_wt: 1
+
+main_loss:
+  wt: 1
+  cascading_type: null
+#  cascaded: False
+
+input_channel_gating:
+  enabled: False
+  upper_bounds: null
+  usage_loss_wt: null
+
+pooling:
+  enabled: True
+  conf_loss_wt: 0
+  #  inconf_loss_wt: 0.1
+  inconf_loss_wts: [ 0.1,0.1,0.1,0.1 ]
+  #  classwise_inconf_loss_wts: None
+  use_relative_wt: False
+  mean_coeff: 1.0
+
+cam_agreement:
+  enabled: False
+  loss_wt: 1
+  disabled_exits: [ ]
+  detach_lower_cam: True
+  only_correct: True
+
+exit_gating:
+  enabled: True
+  gate0_gamma: 3
+  gate_gamma: 1
+  ema_coeff: 1.0
+  train_acc_thresholds: [ 0.5, 0.6, 0.7, 0.8 ]
+  min_epochs: 1
+  max_epochs: null
+  loss_wt: 1
+  cascaded: False
+  weight_offset: 0.1
+  balance_factor: 0.5
+
+cut_mix:
+  enabled: False
+  loss_wt: 1
+  beta: 0.2
+  start_epoch: 1
+
+self_cut_mix:
+  enabled: False
+  loss_wt: 1
+  beta: 0.2
+  start_epoch: 30
+
+
+cam_correction:
+  enabled: False
+
+gt_enhancement:
+  enabled: False
+  loss_wt: 1.0
+
+gt_suppression:
+  enabled: False
+  loss_wt: 1.0
+
+compactness:
+  enabled: False
+  loss_wt: 1.0
+
+ram_loss:
+  enabled: False
+  start_epoch: 10
+  loss_wt: 0.1
+  bg_threshold: 'mean'
+  fg_bg_gap: 0.1
+
+logit_distillation:
+  enabled: False
+  loss_wt: 1
+  temperature: 1
+  teacher_ix: 3
+
+cam_distillation:
+  enabled: False
+  loss_wt: 1
+  teacher_ix: 1
+
+

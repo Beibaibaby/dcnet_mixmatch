@@ -1,0 +1,5 @@
+defaults:
+  - base_trainer
+name: GroupDROTrainer
+group_weight_step_size: 0.01
+group_by: 'group_ix'

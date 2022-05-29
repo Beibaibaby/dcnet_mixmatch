@@ -1,0 +1,25 @@
+data_dir: ${paths.root}/datasets/${dataset.name}
+num_workers: 8
+num_groups: null
+use_opponent_color_space: false
+
+# For biased mnist
+bias_split_name: ''
+trainval_sub_dir: ''
+
+# PCA
+pca_file: null
+pca_patch_dim: null
+pca_num_components: null
+mean_rgb: [0,0,0]
+
+# Sampling
+sampling_type: 'default' # 'balanced', 'subsample'
+sampling_gamma: 0.5
+sampling_attributes: null # e.g., ['y'] for image_net_lt,  ['group_ix'] for datasets with groups
+
+
+normalize: false
+original_image_size: 224
+image_size: 224
+augmentations:

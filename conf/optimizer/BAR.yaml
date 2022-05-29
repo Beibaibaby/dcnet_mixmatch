@@ -1,0 +1,7 @@
+defaults:
+  - base_optimizer
+name: Adam
+epochs: 150
+args:
+  lr: 5e-4
+  weight_decay: 5e-4

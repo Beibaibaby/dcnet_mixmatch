@@ -1,0 +1,26 @@
+name: null
+#nesterov: False # only applicable for SGD
+#learning_rate: null
+#weight_decay: null
+#momentum: 0.9
+args:
+  lr: null
+  weight_decay: null
+
+freeze_layers: null
+epochs: null
+loss_weight_type: null
+lr_warmup_epochs: 0
+lr_warmup_start_factor: 1
+lr_scheduler:
+  type: null
+temperature: 1.0
+grad_clip: null
+#use_agc: False
+#agc_ignore_layers: ['fc']
+agc:
+  enabled: False
+  eps: 1e-3
+  clip_val: 1e-2
+centralize_gradient: False
+normalize_gradient: False

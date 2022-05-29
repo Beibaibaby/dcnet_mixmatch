@@ -1,0 +1,26 @@
+defaults:
+  - base_trainer
+name: LearnedExitTrainer
+predict_from: ['exit_in'] # possible values: exit_in, exit_hid, exit_out
+dims: [32, 16]
+freeze_core_model: False
+
+exit_correctness:
+  loss_wt: 1
+  entropy_loss_wt: 0
+  split: 'Train'
+
+phase1:
+  trainable_modules: ['core_nets','exits','ecp']
+  losses: ['main','ecp']
+  epochs: 150
+  ecp_only_start_epoch: 100
+
+phase2:
+  trainable_modules: ['ecp']
+  losses: ['ecp']
+  epochs: 0
+  ecp_only_start_epoch: 150
+
+save_model_every: 50
+save_predictions_every: 50

@@ -1,0 +1,20 @@
+defaults:
+  - base_config
+  - model: base_model
+  - optimizer: base_optimizer
+  - trainer: base_trainer
+  - override task: train
+cuda: True
+checkpoint_epoch: 0
+load_checkpoint: null
+load_model_only: false
+strict_load_mode: True
+data_split: 'Test'
+#calibration_split: 'Val'
+test_only_epoch: ${optimizer.epochs}
+#test_time_transformation_types: null
+hydra:
+  run:
+    dir: ${paths.root}/occam-networks-outputs/${dataset.name}/${trainer.alias}/${model.name}/${expt_suffix}
+#  sweep:
+#    dir: ${paths.root}/occam-networks-outputs/${dataset.name}/${trainer.name}/${model.name}

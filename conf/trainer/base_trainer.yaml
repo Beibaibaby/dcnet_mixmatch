@@ -1,0 +1,20 @@
+name: BaseTrainer
+alias: ${trainer.name}
+save_model_every: ${optimizer.epochs}
+save_predictions_every: ${optimizer.epochs}
+test_every: 10
+test_epochs: null
+early_stopping_split: 'Val' # Saves a checkpoint with best accuracy on this split
+classification_loss_wt: 1.0
+
+sample_weight_type: null # 'inverse', 'effective_num_samples'
+sample_weight_coeff: 1 # gamma for inverse, beta for effective_num_samples
+sample_weight_key: null # e.g., group_ix
+sample_weight_start_epoch: null
+
+starting_loss_weight: 1
+loss_weight_increment: null
+use_mixed_precision: False # Set to true to use mixed precision training
+loss:
+  name: CrossEntropyLoss
+track_loss: False

@@ -1,0 +1,5 @@
+defaults:
+  - occam_trainer_for_comparison_methods
+name: OccamGroupDROTrainer
+group_weight_step_size: 0.01
+group_by: 'group_ix'

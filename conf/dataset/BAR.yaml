@@ -1,0 +1,25 @@
+defaults:
+  - base_dataset
+name: BAR
+batch_size: 128
+num_classes: 6
+data_dir: ${paths.root}/datasets/BAR
+logits_file: /home/robik/datasets/BAR/preds.pt
+normalize: false
+train_ratio: null
+augmentations:
+  RandomResizedCrop:
+    enabled: True
+    size: 224
+    scale: [0.7,1.0]
+    ratio: [1.0, 1.3333333333333333]
+    interpolation: 2
+  RandomHorizontalFlip:
+    enabled: True
+    p: 0.5
+#  RandomErasing:
+#    enabled: True
+#    p: 0.1
+
+#original_image_size: 178
+image_size: 224
