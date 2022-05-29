@@ -10,3 +10,6 @@ conda install -c anaconda protobuf
 pip install hydra-core --upgrade
 pip install hydra-joblib-launcher --upgrade
 conda install --yes -c anaconda pyyaml
+
+# Check results
+pip install tensorboard

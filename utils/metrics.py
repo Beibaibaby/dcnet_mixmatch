@@ -52,17 +52,21 @@ class Accuracy():
             total += self.total_dict[group_type][grp_name]
         return correct / total * factor
 
-    def to_json(self, factor=100):
+    def summary(self, factor=100):
         obj = {}
         obj['accuracy'] = self.get_accuracy('class', factor)
         obj['MPC'] = self.get_mean_per_group_accuracy('class', factor)
         obj['MPG'] = self.get_mean_per_group_accuracy('group', factor)
-        # for group_type in self.total_dict:
-        #     obj[group_type] = {
-        #         # 'total': self.total_dict[group_type],
-        #         # 'correct': self.correct_dict[group_type],
-        #         'accuracy': self.get_accuracy(group_type, factor),
-        #         'MPG': self.get_mean_per_group_accuracy(group_type, factor),
-        #         # 'per_group': self.get_per_group_accuracy(group_type, factor)
-        #     }
+        return obj
+
+    def detailed(self, factor=100):
+        obj = {}
+        for group_type in self.total_dict:
+            obj[group_type] = {
+                'total': self.total_dict[group_type],
+                'correct': self.correct_dict[group_type],
+                'accuracy': self.get_accuracy(group_type, factor),
+                'MPG': self.get_mean_per_group_accuracy(group_type, factor),
+                'per_group': self.get_per_group_accuracy(group_type, factor)
+            }
         return obj

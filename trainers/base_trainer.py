@@ -2,13 +2,12 @@ import os
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torchvision.datasets import MNIST
-from torch.utils.data import DataLoader, random_split
-from torchvision import transforms
 import pytorch_lightning as pl
 from models import model_factory
 from utils import optimizer_factory
 from utils.metrics import Accuracy
+import json
+from utils import lr_schedulers
 
 
 class BaseTrainer(pl.LightningModule):
@@ -28,11 +27,16 @@ class BaseTrainer(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop. It is independent of forward
+        if batch_idx == 1:
+            sch = self.lr_schedulers()
         model_out = self(batch['x'])
         loss = self.compute_loss(model_out, batch['y'])
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx):
+        return self.shared_validation_step(batch, batch_idx, dataloader_idx)
+
+    def test_step(self, batch, batch_idx, dataloader_idx):
         return self.shared_validation_step(batch, batch_idx, dataloader_idx)
 
     def shared_validation_step(self, batch, batch_idx, dataloader_idx):
@@ -42,6 +46,9 @@ class BaseTrainer(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         return self.shared_validation_epoch_end(outputs, 'val')
 
+    def test_epoch_end(self, outputs):
+        return self.shared_validation_epoch_end(outputs, 'test')
+
     def shared_validation_epoch_end(self, outputs, split):
         for loader_ix, batch_out in enumerate(outputs):
             accuracy = Accuracy()
@@ -50,15 +57,25 @@ class BaseTrainer(pl.LightningModule):
                     outputs[loader_ix]):
                 batch_pred_ys = batch_logits.argmax(dim=-1)
                 accuracy.update(batch_pred_ys, batch_gt_ys, batch_cls_names, batch_grp_names)
-            self.log(f"{loader_key}_accuracy", accuracy.to_json())
+            self.log(f"{loader_key}_accuracy", accuracy.summary())
+            detailed = accuracy.detailed()
+
+            # separately save detailed stats
+            save_dir = os.path.join(os.getcwd(), loader_key)
+            os.makedirs(save_dir, exist_ok=True)
+            with open(os.path.join(save_dir, f'ep_{self.current_epoch}.json'), 'w') as f:
+                json.dump(detailed, f, indent=True, sort_keys=True)
 
     def configure_optimizers(self):
         named_params = self.model.named_parameters()
-        return optimizer_factory.build_optimizer(self.optim_cfg.name,
-                                                 optim_args=self.optim_cfg.args,
-                                                 named_params=named_params,
-                                                 freeze_layers=self.optim_cfg.freeze_layers,
-                                                 model=self.model)
+        optimizer = optimizer_factory.build_optimizer(self.optim_cfg.name,
+                                                      optim_args=self.optim_cfg.args,
+                                                      named_params=named_params,
+                                                      freeze_layers=self.optim_cfg.freeze_layers,
+                                                      model=self.model)
+        lr_scheduler = lr_schedulers.build_lr_scheduler(self.optim_cfg, optimizer)
+        return {'optimizer': optimizer,
+                'lr_scheduler': lr_scheduler}
 
     def compute_loss(self, logits, y):
         return F.cross_entropy(logits, y.squeeze())

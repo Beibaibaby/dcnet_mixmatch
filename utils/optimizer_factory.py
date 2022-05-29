@@ -3,9 +3,6 @@ import logging
 from torch.optim import *
 
 
-# from nfnets.agc import AGC
-
-
 def build_optimizer(optimizer_name, optim_args, named_params, freeze_layers=None,
                     custom_lr_config=None, model=None):  # , use_agc=False, agc_ignore_layers=['fc'], model=None):
     def should_be_added(layer_name, param):

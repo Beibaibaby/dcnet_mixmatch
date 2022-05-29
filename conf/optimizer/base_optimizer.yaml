@@ -10,8 +10,9 @@ args:
 freeze_layers: null
 epochs: null
 loss_weight_type: null
-lr_warmup_epochs: 0
-lr_warmup_start_factor: 1
+lr_warmup:
+  epochs: null
+  multiplier: null
 lr_scheduler:
   type: null
 temperature: 1.0

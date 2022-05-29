@@ -106,13 +106,14 @@ def exec(cfg: DictConfig) -> None:
     else:
         data_loaders = dataloader_factory.build_dataloaders(cfg)
         trainer = trainer_factory.build_trainer(cfg)
-        pl_trainer = pl.Trainer(gpus=1)
+        pl_trainer = pl.Trainer(gpus=1, min_epochs=cfg.optimizer.epochs, max_epochs=cfg.optimizer.epochs)
         trainer.set_dataloader_keys('val', list(data_loaders['val'].keys()))
         trainer.set_dataloader_keys('test', list(data_loaders['test'].keys()))
-        pl_trainer.fit(trainer, data_loaders['train'], val_dataloaders=list(data_loaders['val'].values()))
-        # trainer.test(data_loaders['Test'])
-        # pl_trainer.test()
-        # trainer.train(data_loaders['Train'], data_loaders['Test'])
+
+        pl_trainer.fit(trainer,
+                       train_dataloaders=data_loaders['train'],
+                       val_dataloaders=list(data_loaders['val'].values()))
+        pl_trainer.test(trainer.model, data_loaders['Test'])
 
     #
     # elif cfg.task.name == 'compute_intrinsic_measures':
