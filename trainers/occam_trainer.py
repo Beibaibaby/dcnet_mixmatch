@@ -30,6 +30,14 @@ class OccamTrainer(BaseTrainer):
         return loss
 
     def compute_losses(self, batch, batch_idx, model_out, exit_ix):
+        """
+        Computes CAM Suppression loss, exit gate loss and gate-weighted CE Loss
+        :param batch:
+        :param batch_idx:
+        :param model_out:
+        :param exit_ix:
+        :return:
+        """
         gt_ys = batch['y'].squeeze()
         loss_dict = {}
 
