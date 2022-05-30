@@ -76,7 +76,16 @@ def occam_resnet18_img64(num_classes):
                        initial_kernel_size=3,
                        initial_stride=1,
                        initial_padding=1,
-                       use_initial_max_pooling=True,
+                       use_initial_max_pooling=False,
+                       exits_kwargs={
+                           'exit_out_dims': num_classes,
+                       })
+
+
+def occam_resnet18(num_classes):
+    return OccamResNet(block=BasicBlock,
+                       layers=[2, 2, 2, 2],
+                       width=58,
                        exits_kwargs={
                            'exit_out_dims': num_classes,
                        })

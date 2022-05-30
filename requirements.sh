@@ -11,6 +11,10 @@ pip install hydra-core --upgrade
 pip install hydra-joblib-launcher --upgrade
 conda install --yes -c anaconda pyyaml
 
+pip install opencv-python
+pip install emnist
+conda install --yes h5py
+
 # Analysis/results
 pip install tensorboard
 pip install torch-summary

@@ -11,7 +11,7 @@ freeze_layers: null
 epochs: null
 loss_weight_type: null
 lr_warmup:
-  epochs: null
+  epochs: 0
   multiplier: null
 lr_scheduler:
   type: null

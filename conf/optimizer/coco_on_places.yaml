@@ -9,7 +9,7 @@ args:
 
 lr_warmup:
   epochs: 5
-  start_lr: 1e-3
+  start_lr: 1e-2
 lr_scheduler:
   type: MultiStepLR
   args:

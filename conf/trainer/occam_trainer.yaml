@@ -2,13 +2,12 @@ defaults:
   - base_trainer
 name: OccamTrainer
 cam_suppression:
-  loss_wt: 1
-  inconf_loss_wts: [ 0.1,0.1,0.1,0.1 ]
+  loss_wt: 0.1
 
 exit_gating:
   loss_wt: 1
-  gate0_gamma: 3
-  gate_gamma: 1
+  gamma0: 3
+  gamma: 1
   train_acc_thresholds: [ 0.5, 0.6, 0.7, 0.8 ]
   min_epochs: 1
   weight_offset: 0.1

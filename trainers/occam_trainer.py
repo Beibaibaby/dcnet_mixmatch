@@ -22,30 +22,28 @@ class OccamTrainer(BaseTrainer):
 
         # Compute exit-wise losses
         for exit_ix in range(len(self.model.multi_exit.exit_block_nums)):
-            _loss_dict = self.compute_loss(batch, batch_idx, model_out, exit_ix)
+            _loss_dict = self.compute_losses(batch, batch_idx, model_out, exit_ix)
             for _k in _loss_dict:
                 self.log(f'{_k} E={exit_ix}', _loss_dict[_k].mean())
                 loss += _loss_dict[_k].mean()
         return loss
 
-    def compute_loss(self, batch, batch_idx, model_out, exit_ix):
+    def compute_losses(self, batch, batch_idx, model_out, exit_ix):
         gt_ys = batch['y'].squeeze()
         loss_dict = {}
 
-        # Compute difficulty-weighted CE loss
         logits = model_out[f'E={exit_ix}, logits']
-        loss_dict['xe'] = F.cross_entropy(logits, gt_ys)
 
-        # Compute CAM Suppression Loss
+        # Compute CAM suppression loss
         supp_cfg = self.trainer_cfg.cam_suppression
         if supp_cfg.loss_wt != 0.0:
-            loss_dict['supp'] = supp_cfg.inconf_loss_wts[exit_ix] * \
-                                CAMSuppressionLoss()(model_out[f'E={exit_ix}, cam'], gt_ys)
+            loss_dict['supp'] = supp_cfg.loss_wt * CAMSuppressionLoss()(model_out[f'E={exit_ix}, cam'], gt_ys)
 
         # Compute exit gate loss
         gate_cfg = self.trainer_cfg.exit_gating
         if gate_cfg.loss_wt != 0.0:
             if batch_idx == 0:
+                # The loss is stateful (computes accuracy, which is reset per epoch)
                 setattr(self, f'exit_gate_loss_{exit_ix}', ExitGateLoss(gate_cfg.train_acc_thresholds[exit_ix],
                                                                         gate_cfg.balance_factor))
 
@@ -54,19 +52,43 @@ class OccamTrainer(BaseTrainer):
             loss_dict['gate'] = gate_cfg.loss_wt * getattr(self, f'exit_gate_loss_{exit_ix}') \
                 (logits, gt_ys, gates, force_use=force_use)
 
+        # Compute gate-weighted CE Loss
+        if batch_idx == 0:
+            # The loss is stateful (maintains max loss wt, which we reset every epoch.)
+            setattr(self, f"GateWeightedCELoss_{exit_ix}", GateWeightedCELoss(gate_cfg.gamma0, gate_cfg.gamma,
+                                                                              offset=gate_cfg.weight_offset))
+        prev_gates = None if exit_ix == 0 else model_out[f"E={exit_ix - 1}, gates"]
+        loss_dict['ce'] = getattr(self, f"GateWeightedCELoss_{exit_ix}")(exit_ix, logits, prev_gates, gt_ys)
         return loss_dict
 
-    def validation_step(self, batch, batch_idx, dataloader_idx):
-        pass
+    def shared_validation_step(self, batch, batch_idx, dataloader_idx=None):
+        model_outputs = self(batch['x'])
+        return model_outputs['early_logits'].cpu(), batch['y'].cpu(), batch['group_name'], batch['class_name']
 
-    def test_step(self, batch, batch_idx, dataloader_idx):
-        pass
 
-    def validation_epoch_end(self, outputs):
-        pass
+class GateWeightedCELoss():
+    def __init__(self, gamma0=3, gamma=1, eps=1e-5, offset=0.1):
+        self.gamma0 = gamma0
+        self.gamma = gamma
+        self.eps = eps
+        self.offset = offset
+        self.max_wt = 0  # stateful
 
-    def test_epoch_end(self, outputs):
-        pass
+    def __call__(self, exit_ix, curr_logits, prev_gates, gt_ys):
+        curr_gt_proba = F.softmax(curr_logits, dim=1).gather(1, gt_ys.squeeze().view(-1, 1)).squeeze()
+        if exit_ix == 0:
+            assert prev_gates is None
+            # bias-amp loss
+            loss_wt = curr_gt_proba.detach() ** self.gamma0
+        else:
+            # weighted loss
+            loss_wt = (1 - prev_gates.detach()) ** self.gamma
+        curr_max_wt = loss_wt.max().detach()
+        if curr_max_wt > self.max_wt:
+            self.max_wt = curr_max_wt
+
+        loss_wt = loss_wt / (self.max_wt + self.eps)
+        return (loss_wt + self.offset) * F.cross_entropy(curr_logits, gt_ys, reduction='none')
 
 
 class CAMSuppressionLoss():
@@ -128,4 +150,4 @@ class ExitGateLoss():
                                          (torch.ones_like(gate_gt) / (_continue_cnt + eps)) ** self.balance_factor)
             gate_loss = _gate_loss_wts * F.binary_cross_entropy(gates, gate_gt.float(), reduction='none')
             return gate_loss.mean()
-        return 0
+        return torch.zeros_like(logits.max(dim=1)[0])

@@ -95,8 +95,8 @@ class BiasedMNISTDataset(BaseDataset):
                 'class_name': str(y),
                 'item_ix': curr_factor_to_val['index'],
                 'group_ix': group_ix,
-                'index': index
-                # 'group_name': group_name,
+                'index': index,
+                'group_name': group_name,
                 # 'maj_min_group_ix': maj_min_group_ix,
                 # 'maj_min_group_name': maj_min_group_name
             }
@@ -109,6 +109,7 @@ class BiasedMNISTDataset(BaseDataset):
                         item_data[grp_key] = k + '_majority'
                     else:
                         item_data[grp_key] = k + '_minority'
+                    # item_data['group_name'] = item_data[grp_key]
 
             # There is a memory leak issue with copy-on-access with data types such as dict/list
             # Instead of using a dict, let us create separate numpy arrays per key
@@ -140,7 +141,7 @@ class BiasedMNISTDataset(BaseDataset):
         item_data['x'] = img_n_mask[0]
         item_data['mask'] = img_n_mask[1]
         item_data['mask'] = tF.to_tensor(item_data['mask'])
-
+        item_data['y'] = torch.LongTensor([item_data['y']])
         return item_data
 
 
@@ -215,10 +216,10 @@ def create_biased_mnist_dataloader_for_split(dataset_cfg, split):
 def create_biased_mnist_dataloaders(config):
     ds_cfg = config.dataset
     logging.getLogger().info(f"Setting the num_groups to {ds_cfg.num_groups}")
-    out = {'Test': {}}
-    out['Train'] = create_biased_mnist_dataloader_for_split(ds_cfg, 'train')
-    out['Test']['Val'] = create_biased_mnist_dataloader_for_split(ds_cfg, 'val')
-    out['Test']['Test'] = create_biased_mnist_dataloader_for_split(ds_cfg, 'test')
+    out = {'test': {}, 'val': {}}
+    out['train'] = create_biased_mnist_dataloader_for_split(ds_cfg, 'train')
+    out['val']['val'] = create_biased_mnist_dataloader_for_split(ds_cfg, 'val')
+    out['test']['test'] = create_biased_mnist_dataloader_for_split(ds_cfg, 'test')
     return out
 
 

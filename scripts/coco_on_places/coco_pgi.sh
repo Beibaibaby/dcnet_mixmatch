@@ -5,7 +5,7 @@ GPU=0
 dataset=coco_on_places
 optim=coco_on_places
 
-for inv_wt in 1 5 50 100; do
+for inv_wt in 50; do
   CUDA_VISIBLE_DEVICES=${GPU} python main.py \
   model.name=resnet18_img64 \
   trainer=pgi_trainer \

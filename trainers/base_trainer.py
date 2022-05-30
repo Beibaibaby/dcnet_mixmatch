@@ -32,13 +32,13 @@ class BaseTrainer(pl.LightningModule):
         self.log('loss', loss, on_epoch=True, batch_size=self.config.dataset.batch_size)
         return loss
 
-    def validation_step(self, batch, batch_idx, dataloader_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=None):
         return self.shared_validation_step(batch, batch_idx, dataloader_idx)
 
-    def test_step(self, batch, batch_idx, dataloader_idx):
+    def test_step(self, batch, batch_idx, dataloader_idx=None):
         return self.shared_validation_step(batch, batch_idx, dataloader_idx)
 
-    def shared_validation_step(self, batch, batch_idx, dataloader_idx):
+    def shared_validation_step(self, batch, batch_idx, dataloader_idx=None):
         logits = self(batch['x'])
         return logits.cpu(), batch['y'].cpu(), batch['group_name'], batch['class_name']
 
@@ -49,21 +49,29 @@ class BaseTrainer(pl.LightningModule):
         return self.shared_validation_epoch_end(outputs, 'test')
 
     def shared_validation_epoch_end(self, outputs, split):
-        for loader_ix, batch_out in enumerate(outputs):
-            accuracy = Accuracy()
-            loader_key = self.get_dataloader_keys(split)[loader_ix]
-            for batch_ix, (batch_logits, batch_gt_ys, batch_grp_names, batch_cls_names) in enumerate(
-                    outputs[loader_ix]):
-                batch_pred_ys = batch_logits.argmax(dim=-1)
-                accuracy.update(batch_pred_ys, batch_gt_ys, batch_cls_names, batch_grp_names)
-            self.log(f"{loader_key}_accuracy", accuracy.summary())
-            detailed = accuracy.detailed()
+        keys = self.get_dataloader_keys(split)
+        if len(keys) > 1:
+            for loader_ix, loader_out in enumerate(outputs):
+                loader_key = self.get_dataloader_keys(split)[loader_ix]
+                self._shared_validation_epoch_end(loader_out, loader_key)
+        else:
+            loader_key = self.get_dataloader_keys(split)[0]
+            loader_out = outputs
+            self._shared_validation_epoch_end(loader_out, loader_key)
 
-            # separately save detailed stats
-            save_dir = os.path.join(os.getcwd(), loader_key)
-            os.makedirs(save_dir, exist_ok=True)
-            with open(os.path.join(save_dir, f'ep_{self.current_epoch}.json'), 'w') as f:
-                json.dump(detailed, f, indent=True, sort_keys=True)
+    def _shared_validation_epoch_end(self, loader_out, loader_key):
+        accuracy = Accuracy()
+        for batch_logits, batch_gt_ys, batch_grp_names, batch_cls_names in loader_out:
+            batch_pred_ys = batch_logits.argmax(dim=-1)
+            accuracy.update(batch_pred_ys, batch_gt_ys, batch_cls_names, batch_grp_names)
+        self.log(f"{loader_key}_accuracy", accuracy.summary())
+        detailed = accuracy.detailed()
+
+        # separately save detailed stats
+        save_dir = os.path.join(os.getcwd(), loader_key)
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, f'ep_{self.current_epoch}.json'), 'w') as f:
+            json.dump(detailed, f, indent=True, sort_keys=True)
 
     def configure_optimizers(self):
         named_params = self.model.named_parameters()
