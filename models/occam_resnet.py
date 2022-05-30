@@ -59,17 +59,9 @@ class OccamResNet(VariableWidthResNet):
         if self.use_initial_max_pooling:
             x = self.maxpool(x)
 
-        x = self.layer1(x)
-        block_num_to_exit_in[0] = x
-
-        x = self.layer2(x)
-        block_num_to_exit_in[1] = x
-
-        x = self.layer3(x)
-        block_num_to_exit_in[2] = x
-
-        x = self.layer4(x)
-        block_num_to_exit_in[3] = x
+        for i in range(0, 4):
+            x = getattr(self, f'layer{i + 1}')(x)
+            block_num_to_exit_in[i] = x
 
         return self.multi_exit(block_num_to_exit_in)
 
