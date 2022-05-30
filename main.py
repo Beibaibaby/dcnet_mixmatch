@@ -113,7 +113,8 @@ def exec(cfg: DictConfig) -> None:
         pl_trainer = pl.Trainer(gpus=1,
                                 min_epochs=cfg.optimizer.epochs,
                                 max_epochs=cfg.optimizer.epochs,
-                                check_val_every_n_epoch=cfg.trainer.check_val_every_n_epoch)
+                                check_val_every_n_epoch=cfg.trainer.check_val_every_n_epoch,
+                                )
 
         pl_trainer.fit(trainer,
                        train_dataloaders=data_loaders['train'],

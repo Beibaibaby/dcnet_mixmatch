@@ -25,17 +25,16 @@ class PGITrainer(BaseTrainer):
         main_loss = self.compute_loss(logits, batch['y'])
         iter = self.current_epoch * self.iters_per_epoch + batch_idx + 1
         inv_loss = self.calc_invariance_loss(logits, batch['y'], batch, iter)
-        self.log('loss', main_loss, on_epoch=True, batch_size=self.config.dataset.batch_size)
-        self.log('inv_loss', inv_loss, on_epoch=True, batch_size=self.config.dataset.batch_size)
         opt = self.optimizers()
         opt.zero_grad()
         if inv_loss != 0:
             self.manual_backward(inv_loss, retain_graph=True, inputs=self.non_exit_layers)
         self.manual_backward(main_loss)
         opt.step()
+        self.log('loss', main_loss, on_epoch=True, batch_size=self.config.dataset.batch_size)
+        self.log('inv_loss', inv_loss, on_epoch=True, batch_size=self.config.dataset.batch_size)
 
     def calc_invariance_loss(self, logits, gt_ys, batch, iter, eps=1e-12):
-
         unq_ys = torch.unique(gt_ys)
         batch_grp_ixs = batch['group_ix']
         inv_loss = 0
@@ -85,4 +84,5 @@ class PGITrainer(BaseTrainer):
         for n, p in self.model.named_parameters():
             if omit_key not in n and p.requires_grad:
                 non_exit_layers.append(p)
+
         return non_exit_layers
