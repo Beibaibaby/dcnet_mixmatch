@@ -53,15 +53,16 @@ class BaseTrainer(pl.LightningModule):
         if len(keys) > 1:
             for loader_ix, loader_out in enumerate(outputs):
                 loader_key = self.get_dataloader_keys(split)[loader_ix]
-                self._shared_validation_epoch_end(loader_out, loader_key)
+                self.shared_validation_epoch_end_single_loader(loader_out, loader_key)
         else:
             loader_key = self.get_dataloader_keys(split)[0]
             loader_out = outputs
-            self._shared_validation_epoch_end(loader_out, loader_key)
+            self.shared_validation_epoch_end_single_loader(loader_out, loader_key)
 
-    def _shared_validation_epoch_end(self, loader_out, loader_key):
+    def shared_validation_epoch_end_single_loader(self, loader_out, loader_key):
         accuracy = Accuracy()
-        for batch_logits, batch_gt_ys, batch_grp_names, batch_cls_names in loader_out:
+        for ix in range(len(loader_out)):
+            batch_logits, batch_gt_ys, batch_grp_names, batch_cls_names = loader_out[ix][:4]
             batch_pred_ys = batch_logits.argmax(dim=-1)
             accuracy.update(batch_pred_ys, batch_gt_ys, batch_cls_names, batch_grp_names)
         self.log(f"{loader_key}_accuracy", accuracy.summary())

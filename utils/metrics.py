@@ -10,10 +10,12 @@ class Accuracy():
         self.correct_dict = {}
         self.total_dict = {}
 
-    def update(self, pred_ys, gt_ys, class_names, group_names):
-        for pred_y, gt_y, cls_name, group_name in zip(pred_ys, gt_ys, class_names, group_names):
-            self.update_one(pred_y, gt_y, cls_name, 'class')
-            self.update_one(pred_y, gt_y, group_name, 'group')
+    def update(self, pred_ys, gt_ys, class_names=None, group_names=None):
+        for ix in range(len(pred_ys)):
+            cls_name = str(gt_ys[ix]) if class_names is None else class_names[ix]
+            grp_name = cls_name if group_names is None else group_names[ix]
+            self.update_one(pred_ys[ix], gt_ys[ix], cls_name, 'class')
+            self.update_one(pred_ys[ix], gt_ys[ix], grp_name, 'group')
 
     def update_one(self, pred_y, gt_y, name, grp_type):
         name = str(name)
@@ -70,3 +72,24 @@ class Accuracy():
                 'per_group': self.get_per_group_accuracy(group_type, factor)
             }
         return obj
+
+
+class GateMetric():
+    def __init__(self, threshold=0.5):
+        self.total = 0
+        self.exited = 0
+        self.threshold = threshold
+
+    def update(self, exit_probas):
+        for proba in exit_probas:
+            if proba >= self.threshold:
+                self.exited += 1
+            self.total += 1
+
+    def get_exit_pct(self, factor=100):
+        return self.exited / self.total * factor
+
+    def summary(self):
+        return {
+            'Exit%': self.get_exit_pct()
+        }

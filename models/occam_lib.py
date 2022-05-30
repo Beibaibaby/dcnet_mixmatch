@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from utils.metrics import Accuracy, GateMetric
 
 
 class ExitDataTypes:
@@ -305,3 +306,32 @@ class MultiExitModule(nn.Module):
         exit_outs['early_exit_names'] = early_exit_names
         exit_outs['early_logits'] = early_exit_logits
         return exit_outs
+
+
+class MultiExitStats:
+    def __init__(self):
+        self.exit_ix_to_stats = {}
+
+    def __call__(self, num_exits, exit_outs, gt_ys, class_names=None, group_names=None):
+        for exit_ix in range(num_exits):
+            if exit_ix not in self.exit_ix_to_stats:
+                self.exit_ix_to_stats[exit_ix] = {
+                    'accuracy': Accuracy(),
+                    'gate': GateMetric()
+                }
+            logits_key = f'E={exit_ix}, logits'
+            logits = exit_outs[logits_key]
+            pred_ys = torch.argmax(logits, dim=-1)
+            self.exit_ix_to_stats[exit_ix]['accuracy'].update(pred_ys, gt_ys, class_names, group_names)
+
+            gate_key = f"E={exit_ix}, gates"
+            gate_vals = exit_outs[gate_key]
+            self.exit_ix_to_stats[exit_ix]['gate'].update(gate_vals)
+
+    def summary(self):
+        exit_to_summary = {}
+        for exit_ix in self.exit_ix_to_stats:
+            for k in self.exit_ix_to_stats[exit_ix]:
+                for k2 in self.exit_ix_to_stats[exit_ix][k].summary():
+                    exit_to_summary[f"E={exit_ix} {k2}"] = self.exit_ix_to_stats[exit_ix][k].summary()[k2]
+        return exit_to_summary

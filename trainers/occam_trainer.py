@@ -4,6 +4,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from utils.metrics import Accuracy
+from models.occam_lib import MultiExitStats
 
 
 class OccamTrainer(BaseTrainer):
@@ -61,9 +62,19 @@ class OccamTrainer(BaseTrainer):
         loss_dict['ce'] = getattr(self, f"GateWeightedCELoss_{exit_ix}")(exit_ix, logits, prev_gates, gt_ys)
         return loss_dict
 
-    def shared_validation_step(self, batch, batch_idx, dataloader_idx=None):
+    def shared_validation_step(self, batch, batch_idx, dataloader_idx=None, save_gate_stats=False):
         model_outputs = self(batch['x'])
-        return model_outputs['early_logits'].cpu(), batch['y'].cpu(), batch['group_name'], batch['class_name']
+        return model_outputs['early_logits'].cpu(), batch['y'].cpu(), batch['group_name'], \
+               batch['class_name'], model_outputs
+
+    def shared_validation_epoch_end_single_loader(self, loader_out, loader_key):
+        super().shared_validation_epoch_end_single_loader(loader_out, loader_key)
+        stats = MultiExitStats()
+        for ix in range(len(loader_out)):
+            logits, gt_ys, grp_names, cls_names, exit_outs = loader_out[ix][:5]
+            num_exits = len(self.model.multi_exit.exit_block_nums)
+            stats(num_exits, exit_outs, gt_ys, cls_names, grp_names)
+            self.log_dict(stats.summary())
 
 
 class GateWeightedCELoss():
