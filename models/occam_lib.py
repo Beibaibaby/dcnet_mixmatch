@@ -186,7 +186,7 @@ class ExitModule(nn.Module):
         cam = self.cam(cam_in)  # Class activation maps before pooling
         out['cam'] = cam
 
-        out['logits'] = F.adaptive_avg_pool2d(cam, (1))
+        out['logits'] = F.adaptive_avg_pool2d(cam, (1)).squeeze()
         if self.use_gate:
             gate_out = self.gate(x.detach())
             out['gates'] = gate_out
