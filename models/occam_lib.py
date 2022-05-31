@@ -162,7 +162,6 @@ class ExitModule(nn.Module):
             in_channels=self.cam_hid_dims,
             out_channels=self.out_dims, kernel_size=1, padding=0)
 
-        # Construct a separate gate for each pool size
         if self.use_gate:
             self.gate = self.gate_type(self.cam_hid_dims,
                                        norm_type=self.gate_norm_type,

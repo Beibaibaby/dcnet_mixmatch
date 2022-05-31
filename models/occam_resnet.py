@@ -29,14 +29,11 @@ class OccamResNet(VariableWidthResNet):
                          initial_padding=initial_padding,
                          use_initial_max_pooling=use_initial_max_pooling)
         self.exits_cfg = exits_kwargs
-        # Delete the classifier created by super class
         del self.fc
 
         multi_exit = MultiExitModule(**exits_kwargs)
-        multi_exit.build_and_add_exit(self.layer1[-1].out_dims)
-        multi_exit.build_and_add_exit(self.layer2[-1].out_dims)
-        multi_exit.build_and_add_exit(self.layer3[-1].out_dims)
-        multi_exit.build_and_add_exit(self.layer4[-1].out_dims)
+        for i in range(0, 4):
+            multi_exit.build_and_add_exit(getattr(self, f'layer{i + 1}')[-1].out_dims)
         self.multi_exit = multi_exit
         self.init_weights()
 
@@ -51,7 +48,6 @@ class OccamResNet(VariableWidthResNet):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        block_ix, exit_ix = 0, 0
         block_num_to_exit_in = {}
         x = self.conv1(x)
         x = self.bn1(x)
