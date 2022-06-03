@@ -31,7 +31,7 @@ class Accuracy():
             self.correct_dict[grp_type][name] += 1
         self.total_dict[grp_type][name] += 1
 
-    def get_per_group_accuracy(self, group_type, factor=1):
+    def get_per_group_accuracy(self, group_type='group', factor=1):
         assert group_type in self.total_dict
         per_group_accuracy = {}
         for group_name in self.correct_dict[group_type]:
@@ -39,7 +39,7 @@ class Accuracy():
                 = self.correct_dict[group_type][group_name] / self.total_dict[group_type][group_name] * factor
         return per_group_accuracy
 
-    def get_mean_per_group_accuracy(self, group_type, factor=1):
+    def get_mean_per_group_accuracy(self, group_type='group', factor=1):
         total_acc, total_num = 0, 0
         per_group_accuracy = self.get_per_group_accuracy(group_type)
         for group_name in per_group_accuracy:
@@ -47,7 +47,7 @@ class Accuracy():
             total_num += 1
         return total_acc / total_num * factor
 
-    def get_accuracy(self, group_type, factor=1):
+    def get_accuracy(self, group_type='class', factor=1):
         correct, total = 0, 0
         for grp_name in self.total_dict[group_type]:
             correct += self.correct_dict[group_type][grp_name]

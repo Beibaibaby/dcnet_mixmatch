@@ -189,7 +189,7 @@ def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes,
             'peak_iou': peak_iou,
             'peak_thresh': peak_thresh,
             'accuracy': exit_to_acc_metric[exit_ix].get_accuracy(),
-            'mean_per_class': exit_to_acc_metric[exit_ix].get_mean_per_class_accuracy()
+            'mean_per_class': exit_to_acc_metric[exit_ix].get_mean_per_group_accuracy(group_type='class')
         }
 
     print(json.dumps(exit_to_metrics, indent=4))
