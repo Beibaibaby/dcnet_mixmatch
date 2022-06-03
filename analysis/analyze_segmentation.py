@@ -98,7 +98,7 @@ def main_calc_segmentation_metrics(config, data_loader):
 
 # TODO: clean up
 def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes, exit_to_resize_to=2,
-                              save_every=10):
+                              save_every=5):
     """
 
     :param model: Supports both OccamNets and non-Occam networks. For the latter, specify the exit layer in
@@ -221,15 +221,18 @@ def show_images(original, mask, exit_to_single_class_cams, save_dir):
     os.makedirs(save_dir, exist_ok=True)
     imwrite(os.path.join(save_dir, 'original.jpg'), to_numpy_img(original))
     ow, oh = original.shape[1], original.shape[2]
+    original = (original - original.min()) / (original.max() - original.min())
 
+    _inter_mask = torch.relu(interpolate(mask.detach().cpu(), oh, ow) - 0.5)
     imwrite(os.path.join(save_dir, 'true_mask.jpg'),
-            to_numpy_img(original.detach().cpu() * interpolate(mask.detach().cpu(), oh, ow))
+            to_numpy_img(original.detach().cpu() * _inter_mask.unsqueeze(0))
             .squeeze())
 
     for exit_ix in exit_to_single_class_cams:
+        _exit_cam = torch.relu(
+            torch.sigmoid(interpolate(exit_to_single_class_cams[exit_ix], oh, ow).detach().cpu()) - 0.5)
         imwrite(os.path.join(save_dir, f'pred_mask_exit_{exit_ix}.jpg'),
-                to_numpy_img(original.detach().cpu() * interpolate(torch.relu(
-                    torch.sigmoid(exit_to_single_class_cams[exit_ix]) - 0.5).detach().cpu(), oh, ow).squeeze()))
+                to_numpy_img(original.detach().cpu() * _exit_cam.squeeze()))
 
 
 def to_numpy_img(tensor):
