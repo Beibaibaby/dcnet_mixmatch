@@ -70,26 +70,22 @@ class OccamTrainer(BaseTrainer):
         loss_dict['ce'] = getattr(self, f"GateWeightedCELoss_{exit_ix}")(exit_ix, logits, prev_gates, gt_ys)
         return loss_dict
 
-    def shared_validation_step(self, batch, batch_idx, dataloader_idx=None, save_gate_stats=False):
+    def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None):
         model_outputs = self(batch['x'])
-        cpu_model_outputs = {}
-        for k in model_outputs:
-            if isinstance(model_outputs[k], torch.Tensor):
-                cpu_model_outputs[k] = model_outputs[k].detach().cpu()
-            else:
-                cpu_model_outputs[k] = model_outputs[k]
+        super().shared_validation_step(batch, batch_idx, split, dataloader_idx, model_outputs['early_logits'])
+        if batch_idx == 0:
+            me_stats = MultiExitStats()
+            setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_multi_exit_stats', me_stats)
+        me_stats = getattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_multi_exit_stats')
+        num_exits = len(self.model.multi_exit.exit_block_nums)
+        me_stats(num_exits, model_outputs, batch['y'], batch['class_name'], batch['group_name'])
 
-        return model_outputs['early_logits'].cpu(), batch['y'].cpu(), batch['group_name'], \
-               batch['class_name'], cpu_model_outputs
-
-    def shared_validation_epoch_end_single_loader(self, loader_out, loader_key):
-        super().shared_validation_epoch_end_single_loader(loader_out, loader_key)
-        stats = MultiExitStats()
-        for ix in range(len(loader_out)):
-            logits, gt_ys, grp_names, cls_names, exit_outs = loader_out[ix][:5]
-            num_exits = len(self.model.multi_exit.exit_block_nums)
-            stats(num_exits, exit_outs, gt_ys, cls_names, grp_names)
-            self.log_dict(stats.summary())
+    def shared_validation_epoch_end(self, outputs, split):
+        super().shared_validation_epoch_end(outputs, split)
+        loader_keys = self.get_dataloader_keys(split)
+        for loader_key in loader_keys:
+            me_stats = getattr(self, f'{split}_{loader_key}_multi_exit_stats')
+            self.log_dict(me_stats.summary())
 
 
 class GateWeightedCELoss():
