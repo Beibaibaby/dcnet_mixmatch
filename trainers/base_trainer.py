@@ -21,6 +21,7 @@ class BaseTrainer(pl.LightningModule):
 
     def build_model(self):
         self.model = model_factory.build_model(self.config.model)
+        print(self.model)
 
     def forward(self, x):
         return self.model(x)

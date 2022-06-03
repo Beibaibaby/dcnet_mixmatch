@@ -20,14 +20,16 @@ def build_non_linearity(non_linearity_type, num_features):
 
 class Conv2(nn.Module):
     def __init__(self, in_features, hid_features, out_features, norm_type=nn.BatchNorm2d, non_linearity_type=nn.ReLU,
-                 groups=1, conv_type=nn.Conv2d, kernel_size=3):
+                 groups=1, conv_type=nn.Conv2d, kernel_size=3, stride=1):
         super(Conv2, self).__init__()
         self.conv1 = conv_type(in_channels=in_features, out_channels=hid_features, kernel_size=kernel_size,
+                               stride=stride,
                                padding=kernel_size // 2,
                                groups=groups)
         self.norm1 = norm_type(hid_features)
         self.non_linear1 = build_non_linearity(non_linearity_type, hid_features)
         self.conv2 = nn.Conv2d(in_channels=hid_features, out_channels=out_features, kernel_size=kernel_size,
+                               stride=stride,
                                padding=kernel_size // 2,
                                groups=groups)
 
@@ -119,6 +121,7 @@ class ExitModule(nn.Module):
                  scale_factor=1,
                  groups=1,
                  kernel_size=3,
+                 stride=None,
                  initial_conv_type=Conv2,
                  conv_bias=False,
                  conv_type=nn.Conv2d,
@@ -142,6 +145,9 @@ class ExitModule(nn.Module):
         self.scale_factor = scale_factor
         self.groups = groups
         self.kernel_size = kernel_size
+        if stride is None:
+            stride = kernel_size // 2
+        self.stride = stride
         self.norm_type = norm_type
         self.non_linearity_type = non_linearity_type
         self.gate_type = gate_type
@@ -156,7 +162,8 @@ class ExitModule(nn.Module):
                                             norm_type=self.norm_type,
                                             non_linearity_type=self.non_linearity_type,
                                             conv_type=self.conv_type,
-                                            kernel_size=self.kernel_size)
+                                            kernel_size=self.kernel_size,
+                                            stride=self.stride)
         self.non_linearity = build_non_linearity(self.non_linearity_type, self.cam_hid_dims)
         self.cam = nn.Conv2d(
             in_channels=self.cam_hid_dims,
@@ -213,6 +220,8 @@ class MultiExitModule(nn.Module):
             exit_width_factors=[1 / 4, 1 / 4, 1 / 4, 1 / 4],
             cam_width_factors=[1, 1, 1, 1],
             exit_scale_factors=[1, 1, 1, 1],
+            exit_kernel_sizes=[3, 3, 3, 3],
+            exit_strides=[None] * 4,
             inference_earliest_exit_ix=1
     ) -> None:
         """
@@ -239,6 +248,8 @@ class MultiExitModule(nn.Module):
         self.exit_width_factors = exit_width_factors
         self.cam_width_factors = cam_width_factors
         self.exit_scale_factors = exit_scale_factors
+        self.exit_kernel_sizes = exit_kernel_sizes
+        self.exit_strides = exit_strides
         self.inference_earliest_exit_ix = inference_earliest_exit_ix
         self.set_use_exit_gate(True)
         self.set_return_early_exits(False)
@@ -251,6 +262,8 @@ class MultiExitModule(nn.Module):
             out_dims=self.exit_out_dims,
             hid_dims=int(in_dims * self.exit_width_factors[exit_ix]),
             cam_hid_dims=int(in_dims * self.cam_width_factors[exit_ix]),
+            kernel_size=self.exit_kernel_sizes[exit_ix],
+            stride=self.exit_strides[exit_ix],
             scale_factor=self.exit_scale_factors[exit_ix]
         )
         self.exits.append(exit)

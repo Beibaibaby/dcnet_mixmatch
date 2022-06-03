@@ -87,6 +87,39 @@ def occam_resnet18(num_classes):
                        })
 
 
+# Change stride/kernel size
+def occam_resnet18_k3s2(num_classes):
+    return OccamResNet(block=BasicBlock,
+                       layers=[2, 2, 2, 2],
+                       width=58,
+                       exits_kwargs={
+                           'exit_out_dims': num_classes,
+                           'exit_kernel_sizes': [3] * 4,
+                           'exit_strides': [2] * 4
+                       })
+
+
+def occam_resnet18_k5s2(num_classes):
+    return OccamResNet(block=BasicBlock,
+                       layers=[2, 2, 2, 2],
+                       width=58,
+                       exits_kwargs={
+                           'exit_out_dims': num_classes,
+                           'exit_kernel_sizes': [5] * 4,
+                           'exit_strides': [2] * 4
+                       })
+
+
+def occam_resnet18_k9753s2(num_classes):
+    return OccamResNet(block=BasicBlock,
+                       layers=[2, 2, 2, 2],
+                       width=58,
+                       exits_kwargs={
+                           'exit_out_dims': num_classes,
+                           'exit_kernel_sizes': [9, 7, 5, 3]
+                       })
+
+
 if __name__ == "__main__":
     m = occam_resnet18_img64(20)
     print(m)
