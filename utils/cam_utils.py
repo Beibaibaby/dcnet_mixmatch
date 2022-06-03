@@ -104,9 +104,10 @@ def get_gt_class_cams(model, batch, device=None, target_exit_size=1):
     :param target_exit_size: CAMs are resized to this exit's spatial dims
     :return:
     """
+    if device is not None:
+        batch['x'] = batch['x'].to(device)
+
     if 'occam' in type(model).__name__.lower():
-        if device is not None:
-            batch['x'] = batch['x'].to(device)
         model_out = model(batch['x'])
         exit_to_gt_cams = {}
         resize_H, resize_W = model_out[f"E={target_exit_size}, cam"].shape[2], \

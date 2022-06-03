@@ -159,8 +159,8 @@ class ExitGateLoss():
         :return:
         """
         pred_ys = torch.argmax(logits, dim=1)
-        self.accuracy.update(pred_ys, gt_ys, gt_ys, gt_ys)
-        if self.accuracy.get_mean_per_group_accuracy('class') <= self.acc_threshold or force_use:
+        self.accuracy.update(logits, gt_ys, gt_ys, gt_ys)
+        if self.accuracy.get_mean_per_group_accuracy('class')[1] <= self.acc_threshold or force_use:
             gate_gt = (pred_ys == gt_ys.squeeze()).long()
             _exit_cnt, _continue_cnt = gate_gt.sum().detach(), (1 - gate_gt).sum().detach()
 

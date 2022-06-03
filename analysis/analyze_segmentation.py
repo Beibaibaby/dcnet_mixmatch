@@ -7,28 +7,30 @@ from utils.cam_utils import *
 from sklearn.metrics import confusion_matrix
 from utils.model_utils import load_checkpoint
 
-def get_ious_and_thresholds(gt_mask, pred_mask, ignore_label=None):
+
+def get_binary_ious_conf_matrix(gt_mask, pred_mask):
     """
     Assuming binary gt_mask and a prediction mask between 0-1, it computes IOU at different thresholds
 
     :param gt_mask: binary numpy vector, size=HW
     :param pred_mask: binary numpy vector, size=HW (between 0 and 1)
-    :param ignore_label: default=0 i.e., IOU for bg is not computed
     :return:
     """
-    thresholds, ious = [], []
+    ious, conf_matrices, thresholds = [], [], []
     labels = [0, 1]
-    if ignore_label in labels:
-        labels = labels.remove(ignore_label)
 
     for thresh in np.arange(0, 1, 1 / 10):
         bin_pred_mask = (pred_mask > thresh).astype(np.int)
-        conf_matrix_fn = RunningConfusionMatrix(labels=labels, ignore_label=ignore_label)
+        conf_matrix_fn = RunningConfusionMatrix(labels=labels)
+
         conf_matrix_fn.update_matrix(gt_mask, bin_pred_mask)
+
         iou = conf_matrix_fn.compute_current_mean_intersection_over_union()
+
         ious.append(iou)
+        conf_matrices.append(conf_matrix_fn.overall_confusion_matrix)
         thresholds.append(thresh)
-    return ious, thresholds
+    return ious, conf_matrices, thresholds
 
 
 class RunningConfusionMatrix():
@@ -94,6 +96,7 @@ def main_calc_segmentation_metrics(config, data_loader):
     calc_segmentation_metrics(model, data_loader, device, save_dir, config.dataset.num_classes)
 
 
+# TODO: clean up
 def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes, exit_to_resize_to=2,
                               save_every=10):
     """
@@ -107,7 +110,7 @@ def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes,
     :param exit_to_resize_to: CAMs will be resized to the CAMs from this exit
     :return:
     """
-    exit_to_thresh_to_ious = {}
+    exit_to_thresh_to_details = {}
     _viz_ix = 0
     exit_to_acc_metric = {}
     model = model.eval()
@@ -133,21 +136,24 @@ def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes,
         # Gather logits for accuracy computation and CAMs for segmentation metrics
         for exit_ix in exit_to_gt_cams:
             key = f"E={exit_ix}, cam"
-            if key in model_out:
+            if isinstance(model_out, dict) and key in model_out:
                 exit_to_cams[exit_ix] = model_out[f"E={exit_ix}, cam"]
 
             # Initialize the accuracy metric per exit
-            if exit_ix not in exit_to_thresh_to_ious:
-                exit_to_thresh_to_ious[exit_ix] = {}
+            if exit_ix not in exit_to_thresh_to_details:
+                exit_to_thresh_to_details[exit_ix] = {}
                 exit_to_acc_metric[exit_ix] = Accuracy()
 
             # Gather class-wise logits
-            if f"E={exit_ix}, logits" in model_out:
-                logits = model_out[f"E={exit_ix}, logits"]
-            elif exit_ix == 'early_exit':
-                logits = model_out['early_logits']
+            if isinstance(model_out, dict):
+                if f"E={exit_ix}, logits" in model_out:
+                    logits = model_out[f"E={exit_ix}, logits"]
+                elif exit_ix == 'early_exit':
+                    logits = model_out['early_logits']
+                else:
+                    logits = model_out['logits']
             else:
-                logits = model_out['logits']
+                logits = model_out
             exit_to_gt_cams[exit_ix] = exit_to_gt_cams[exit_ix].unsqueeze(1).detach().cpu()
 
             # Pass CAMs through a sigmoid layer
@@ -155,15 +161,28 @@ def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes,
             gt_class_pred_mask = interpolate(gt_class_pred_mask, resize_H, resize_W)
 
             # Compute IOUs at different thresholds (instead of only using a threshold of 0.5)
-            ious, thresholds = get_ious_and_thresholds(gt_masks.detach().cpu().long().flatten().numpy(),
-                                                       gt_class_pred_mask.detach().cpu().flatten().numpy())
-            for iou, thres in zip(ious, thresholds):
-                if thres not in exit_to_thresh_to_ious[exit_ix]:
-                    exit_to_thresh_to_ious[exit_ix][thres] = []
-                exit_to_thresh_to_ious[exit_ix][thres].append(iou)
+            ious, conf_matrices, thresholds, = get_binary_ious_conf_matrix(
+                gt_masks.detach().cpu().long().flatten().numpy(),
+                gt_class_pred_mask.detach().cpu().flatten().numpy())
 
-            pred_ys = torch.argmax(logits, dim=1)
-            exit_to_acc_metric[exit_ix].update(pred_ys, batch['y'])
+            for iou, conf_matrix, thres in zip(ious, conf_matrices, thresholds):
+                if thres not in exit_to_thresh_to_details[exit_ix]:
+                    exit_to_thresh_to_details[exit_ix][thres] = {'iou': [],
+                                                                 'GT=fg,pred=fg': [],
+                                                                 'GT=bg,pred=bg': [],
+                                                                 'GT=fg,pred=bg': [],
+                                                                 'GT=bg,pred=fg': [],
+                                                                 'total': []}
+                exit_to_thresh_to_details[exit_ix][thres]['iou'].append(iou)
+
+                # GT: axis=1, pred: axis=0
+                exit_to_thresh_to_details[exit_ix][thres]['GT=fg,pred=fg'].append(conf_matrix[1][1])
+                exit_to_thresh_to_details[exit_ix][thres]['GT=bg,pred=bg'].append(conf_matrix[0][0])
+                exit_to_thresh_to_details[exit_ix][thres]['GT=fg,pred=bg'].append(conf_matrix[0][1])
+                exit_to_thresh_to_details[exit_ix][thres]['GT=bg,pred=fg'].append(conf_matrix[1][0])
+                exit_to_thresh_to_details[exit_ix][thres]['total'].append(conf_matrix.sum())
+
+            exit_to_acc_metric[exit_ix].update(logits, batch['y'])
 
         if batch_ix % save_every == 0:
             logging.getLogger().info(f"Saving from batch #: {batch_ix}")
@@ -171,26 +190,27 @@ def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes,
                         gt_masks[0],
                         {exit_ix: exit_to_gt_cams[exit_ix][0] for exit_ix in exit_to_gt_cams},
                         save_dir=save_dir + f'/{_viz_ix}')
-            print(f"{save_dir}")
             _viz_ix += 1
 
     # Compute and print the metrics
     exit_to_metrics = {}
-    for exit_ix in exit_to_thresh_to_ious:
-        peak_iou, peak_thresh = 0, 0
+    for exit_ix in exit_to_thresh_to_details:
+        # peak_iou, peak_conf_matrix, peak_thresh = 0, 0, 0, 0
+        peak_vals = {'iou': 0}
 
-        for thresh in exit_to_thresh_to_ious[exit_ix]:
-            m_iou = np.mean(exit_to_thresh_to_ious[exit_ix][thresh])
-            if m_iou > peak_iou:
-                peak_iou = m_iou
-                peak_thresh = thresh
+        for thresh in exit_to_thresh_to_details[exit_ix]:
+            m_iou = np.mean(exit_to_thresh_to_details[exit_ix][thresh]['iou'])
+            if m_iou > peak_vals['iou']:
+                for k in exit_to_thresh_to_details[exit_ix][thresh]:
+                    peak_vals[k] = np.sum(exit_to_thresh_to_details[exit_ix][thresh][k]) / np.sum(
+                        exit_to_thresh_to_details[exit_ix][thresh]['total'])
+                peak_vals['iou'] = np.mean(exit_to_thresh_to_details[exit_ix][thresh]['iou'])
+                peak_vals['threshold'] = thresh
 
-        exit_to_metrics[exit_ix] = {
-            'peak_iou': peak_iou,
-            'peak_thresh': peak_thresh,
-            'accuracy': exit_to_acc_metric[exit_ix].get_accuracy(),
-            'mean_per_class': exit_to_acc_metric[exit_ix].get_mean_per_group_accuracy(group_type='class')
-        }
+        exit_to_metrics[exit_ix] = peak_vals
+        exit_to_metrics[exit_ix]['accuracy'] = exit_to_acc_metric[exit_ix].get_accuracy(),
+        exit_to_metrics[exit_ix]['mean_per_class'] = exit_to_acc_metric[exit_ix].get_mean_per_group_accuracy(
+            group_type='class')
 
     print(json.dumps(exit_to_metrics, indent=4))
     with open(os.path.join(save_dir, 'segmentation.json'), 'w') as f:

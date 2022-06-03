@@ -45,8 +45,7 @@ class BaseTrainer(pl.LightningModule):
             accuracy = Accuracy()
             setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy', accuracy)
         accuracy = getattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy')
-        pred_ys = logits.argmax(dim=-1)
-        accuracy.update(pred_ys, batch['y'], batch['class_name'], batch['group_name'])
+        accuracy.update(logits, batch['y'], batch['class_name'], batch['group_name'])
 
     def validation_epoch_end(self, outputs):
         return self.shared_validation_epoch_end(outputs, 'val')

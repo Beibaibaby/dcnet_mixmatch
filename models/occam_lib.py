@@ -320,8 +320,7 @@ class MultiExitStats:
                 }
             logits_key = f'E={exit_ix}, logits'
             logits = exit_outs[logits_key]
-            pred_ys = torch.argmax(logits, dim=-1)
-            self.exit_ix_to_stats[exit_ix]['accuracy'].update(pred_ys, gt_ys, class_names, group_names)
+            self.exit_ix_to_stats[exit_ix]['accuracy'].update(logits, gt_ys, class_names, group_names)
 
             gate_key = f"E={exit_ix}, gates"
             gate_vals = exit_outs[gate_key]
