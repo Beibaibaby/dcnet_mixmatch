@@ -114,6 +114,8 @@ def exec(cfg: DictConfig) -> None:
                                 min_epochs=cfg.optimizer.epochs,
                                 max_epochs=cfg.optimizer.epochs,
                                 check_val_every_n_epoch=cfg.trainer.check_val_every_n_epoch,
+                                num_sanity_val_steps=0
+
                                 )
 
         pl_trainer.fit(trainer,

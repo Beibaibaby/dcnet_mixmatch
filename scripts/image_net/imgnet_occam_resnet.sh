@@ -4,7 +4,7 @@ source activate occamnets
 GPU=3
 dataset=image_net
 optim=image_net
-subset_percent=1
+subset_percent=8
 
 CUDA_VISIBLE_DEVICES=${GPU} python main.py \
 model.name=occam_resnet18 \
