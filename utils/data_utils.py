@@ -98,3 +98,4 @@ def to_numpy_img(tensor):
             tensor = torch.permute(tensor, (1, 2, 0))
 
     return (tensor.detach().cpu()).numpy()
+

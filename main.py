@@ -42,21 +42,18 @@ def exec(cfg: DictConfig) -> None:
     cfg.model.num_classes = cfg.dataset.num_classes
     log.info(OmegaConf.to_yaml(cfg, sort_keys=True, resolve=True))
 
-    if cfg.task.name == 'test_only':
+    # Commented out unsupported/yet-to-support tasks
+    if cfg.task.name == 'test':
         data_loaders = dataloader_factory.build_dataloaders(cfg)
+        trainer = trainer_factory.load_trainer(cfg)
+        trainer.set_dataloader_keys('test', list(data_loaders['test'].keys()))
+        pl_trainer = pl.Trainer(gpus=cfg.gpus)
+        pl_trainer.test(trainer, list(data_loaders['test'].values()))
 
-        # Although we are creating a trainer, we will only do inference here
-        if cfg.load_checkpoint is None:
-            cfg.load_checkpoint = os.path.join(os.getcwd(), f'ckpt_latest.pt')
-        trainer = trainer_factory.build_trainer(cfg)
-        logging.getLogger().info("Config:")
-        logging.getLogger().info(OmegaConf.to_yaml(cfg, sort_keys=True, resolve=True))
-
-        # new_test_loaders = {cfg.data_split: data_loaders['Test'][cfg.data_split]}
-        trainer.load_checkpoint_and_test_all(epoch=-1, test_loaders=data_loaders['Test'], force_save=False)
-    # elif cfg.task.name == 'analyze_segmentation':
-    #     from analysis.analyze_segmentation import main_calc_segmentation_metrics
-    #     main_calc_segmentation_metrics(config=cfg, data_loader=build_dataloader_for_split(cfg, cfg.task.split))
+    elif cfg.task.name == 'analyze_segmentation':
+        from analysis.analyze_segmentation import main_calc_segmentation_metrics
+        main_calc_segmentation_metrics(config=cfg,
+                                       data_loader=dataloader_factory.build_dataloader_for_split(cfg, cfg.data_split))
     # elif cfg.task.name == 'visualize_cams':
     #     if cfg.load_checkpoint is None:
     #         cfg.load_checkpoint = os.path.join(os.getcwd(), f'ckpt_latest.pt')
@@ -110,12 +107,11 @@ def exec(cfg: DictConfig) -> None:
         trainer.set_dataloader_keys('test', list(data_loaders['test'].keys()))
         trainer.set_iters_per_epoch(len(data_loaders['train']))
 
-        pl_trainer = pl.Trainer(gpus=1,
+        pl_trainer = pl.Trainer(gpus=cfg.gpus,
                                 min_epochs=cfg.optimizer.epochs,
                                 max_epochs=cfg.optimizer.epochs,
                                 check_val_every_n_epoch=cfg.trainer.check_val_every_n_epoch,
                                 num_sanity_val_steps=0
-
                                 )
 
         pl_trainer.fit(trainer,

@@ -1,2 +1,2 @@
 name: 'analyze_segmentation'
-split: 'Test'
+split: 'val'

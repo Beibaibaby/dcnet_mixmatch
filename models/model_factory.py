@@ -12,20 +12,6 @@ from models.occam_densenet import *
 # from models.occam_resnet_shared_exit import *
 
 
-# class LogitsWrapper(nn.Module):
-#     def __init__(self, model):
-#         """
-#         Wrapper to return output with 'logits' key for compatibility with trainers
-#         :param model:
-#         """
-#         super().__init__()
-#         self.model = model
-#
-#     def forward(self, x):
-#         out = self.model(x)
-#         return {'logits': out}
-
-
 def build_model(model_config):
     if 'occam' in model_config.name:  # or 'resnet' in model_config.name:
         m = eval(model_config.name)(model_config.num_classes)

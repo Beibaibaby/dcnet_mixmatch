@@ -6,10 +6,11 @@ defaults:
   - override task: train
 cuda: True
 checkpoint_epoch: 0
-load_checkpoint: null
+checkpoint_path: null
 load_model_only: false
 strict_load_mode: True
-data_split: 'Test'
+data_split: 'test'
+gpus: 1
 #calibration_split: 'Val'
 test_only_epoch: ${optimizer.epochs}
 #test_time_transformation_types: null

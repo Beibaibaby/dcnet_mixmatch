@@ -1,0 +1,228 @@
+import logging
+import os
+from models.model_factory import build_model
+import json
+from utils.metrics import Accuracy
+from utils.cam_utils import *
+from sklearn.metrics import confusion_matrix
+from utils.model_utils import load_checkpoint
+
+def get_ious_and_thresholds(gt_mask, pred_mask, ignore_label=None):
+    """
+    Assuming binary gt_mask and a prediction mask between 0-1, it computes IOU at different thresholds
+
+    :param gt_mask: binary numpy vector, size=HW
+    :param pred_mask: binary numpy vector, size=HW (between 0 and 1)
+    :param ignore_label: default=0 i.e., IOU for bg is not computed
+    :return:
+    """
+    thresholds, ious = [], []
+    labels = [0, 1]
+    if ignore_label in labels:
+        labels = labels.remove(ignore_label)
+
+    for thresh in np.arange(0, 1, 1 / 10):
+        bin_pred_mask = (pred_mask > thresh).astype(np.int)
+        conf_matrix_fn = RunningConfusionMatrix(labels=labels, ignore_label=ignore_label)
+        conf_matrix_fn.update_matrix(gt_mask, bin_pred_mask)
+        iou = conf_matrix_fn.compute_current_mean_intersection_over_union()
+        ious.append(iou)
+        thresholds.append(thresh)
+    return ious, thresholds
+
+
+class RunningConfusionMatrix():
+    # Adapted from: https://github.com/isi-vista/structure_via_consensus/blob/master/src_release/conf_matrix.py
+    def __init__(self, labels, ignore_label=0):
+        """
+        Updatable confusion matrix
+        :param labels: List[int] representing class ids
+        :param ignore_label: Class
+        """
+        self.labels = labels
+        self.ignore_label = ignore_label
+        self.overall_confusion_matrix = None
+
+    def update_matrix(self, ground_truth, prediction):
+        """
+        Updates the confusion matrix
+        :param ground_truth: Sequence of ground truth values, shape: [N]
+        :param prediction: Sequence of predicted values, shape: [N]
+        :return:
+        """
+
+        # Mask-out value is ignored by default in the sklearn
+        # read sources to see how that was handled
+        # But sometimes all the elements in the groundtruth can
+        # be equal to ignore value which will cause the crush
+        # of scikit_learn.confusion_matrix(), this is why we check it here
+        if (ground_truth == self.ignore_label).all():
+            return
+        current_confusion_matrix = confusion_matrix(y_true=ground_truth,
+                                                    y_pred=prediction,
+                                                    labels=self.labels)
+
+        if self.overall_confusion_matrix is not None:
+            self.overall_confusion_matrix += current_confusion_matrix
+        else:
+
+            self.overall_confusion_matrix = current_confusion_matrix
+
+    def compute_current_mean_intersection_over_union(self):
+        """
+        Computes mean IOU using intersection between ground truth and prediction
+        :return:
+        """
+        intersection = np.diag(self.overall_confusion_matrix)
+        ground_truth_set = self.overall_confusion_matrix.sum(axis=1)
+        predicted_set = self.overall_confusion_matrix.sum(axis=0)
+        union = ground_truth_set + predicted_set - intersection
+
+        intersection_over_union = intersection / union.astype(np.float32)
+        mean_intersection_over_union = np.mean(intersection_over_union)
+
+        return mean_intersection_over_union
+
+
+def main_calc_segmentation_metrics(config, data_loader):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = build_model(config.model)
+    model = model.to(device)
+    save_dir = '/'.join(config.checkpoint_path.split('/')[0:-1]) + '/sample_masks'
+    if config.checkpoint_path is not None:
+        load_checkpoint(model, config.checkpoint_path)
+    calc_segmentation_metrics(model, data_loader, device, save_dir, config.dataset.num_classes)
+
+
+def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes, exit_to_resize_to=2,
+                              save_every=10):
+    """
+
+    :param model: Supports both OccamNets and non-Occam networks. For the latter, specify the exit layer in
+    cam_utils.get_target_layers()
+    :param data_loader: batch must contain 'x', 'y' and 'mask'
+    :param device:
+    :param save_dir:
+    :param num_classes:
+    :param exit_to_resize_to: CAMs will be resized to the CAMs from this exit
+    :return:
+    """
+    exit_to_thresh_to_ious = {}
+    _viz_ix = 0
+    exit_to_acc_metric = {}
+    model = model.eval()
+
+    for batch_ix, batch in enumerate(data_loader):
+        # Gather GT class cams
+        exit_to_gt_cams, model_out = get_gt_class_cams(model, batch, device=device, target_exit_size=exit_to_resize_to)
+        exit_to_cams = {}
+
+        if 'mask' in batch:
+            gt_full_masks = batch['mask'].mean(dim=1).squeeze().detach().cpu().unsqueeze(1)
+            # GT segmentation mask
+            if 'occam' in type(model).__name__.lower():
+                resize_H, resize_W = exit_to_gt_cams[exit_to_resize_to].shape[1], \
+                                     exit_to_gt_cams[exit_to_resize_to].shape[2]
+                gt_masks = interpolate(gt_full_masks, resize_H, resize_W)
+            else:
+                resize_H, resize_W = 14, 14
+                gt_masks = interpolate(gt_full_masks, resize_H, resize_W)
+        else:
+            raise Exception("'mask' field not found: Data loader did not return the ground truth mask!")
+
+        # Gather logits for accuracy computation and CAMs for segmentation metrics
+        for exit_ix in exit_to_gt_cams:
+            key = f"E={exit_ix}, cam"
+            if key in model_out:
+                exit_to_cams[exit_ix] = model_out[f"E={exit_ix}, cam"]
+
+            # Initialize the accuracy metric per exit
+            if exit_ix not in exit_to_thresh_to_ious:
+                exit_to_thresh_to_ious[exit_ix] = {}
+                exit_to_acc_metric[exit_ix] = Accuracy()
+
+            # Gather class-wise logits
+            if f"E={exit_ix}, logits" in model_out:
+                logits = model_out[f"E={exit_ix}, logits"]
+            elif exit_ix == 'early_exit':
+                logits = model_out['early_logits']
+            else:
+                logits = model_out['logits']
+            exit_to_gt_cams[exit_ix] = exit_to_gt_cams[exit_ix].unsqueeze(1).detach().cpu()
+
+            # Pass CAMs through a sigmoid layer
+            gt_class_pred_mask = torch.sigmoid(exit_to_gt_cams[exit_ix])
+            gt_class_pred_mask = interpolate(gt_class_pred_mask, resize_H, resize_W)
+
+            # Compute IOUs at different thresholds (instead of only using a threshold of 0.5)
+            ious, thresholds = get_ious_and_thresholds(gt_masks.detach().cpu().long().flatten().numpy(),
+                                                       gt_class_pred_mask.detach().cpu().flatten().numpy())
+            for iou, thres in zip(ious, thresholds):
+                if thres not in exit_to_thresh_to_ious[exit_ix]:
+                    exit_to_thresh_to_ious[exit_ix][thres] = []
+                exit_to_thresh_to_ious[exit_ix][thres].append(iou)
+
+            pred_ys = torch.argmax(logits, dim=1)
+            exit_to_acc_metric[exit_ix].update(pred_ys, batch['y'])
+
+        if batch_ix % save_every == 0:
+            logging.getLogger().info(f"Saving from batch #: {batch_ix}")
+            show_images(batch['x'][0],
+                        gt_masks[0],
+                        {exit_ix: exit_to_gt_cams[exit_ix][0] for exit_ix in exit_to_gt_cams},
+                        save_dir=save_dir + f'/{_viz_ix}')
+            print(f"{save_dir}")
+            _viz_ix += 1
+
+    # Compute and print the metrics
+    exit_to_metrics = {}
+    for exit_ix in exit_to_thresh_to_ious:
+        peak_iou, peak_thresh = 0, 0
+
+        for thresh in exit_to_thresh_to_ious[exit_ix]:
+            m_iou = np.mean(exit_to_thresh_to_ious[exit_ix][thresh])
+            if m_iou > peak_iou:
+                peak_iou = m_iou
+                peak_thresh = thresh
+
+        exit_to_metrics[exit_ix] = {
+            'peak_iou': peak_iou,
+            'peak_thresh': peak_thresh,
+            'accuracy': exit_to_acc_metric[exit_ix].get_accuracy(),
+            'mean_per_class': exit_to_acc_metric[exit_ix].get_mean_per_class_accuracy()
+        }
+
+    print(json.dumps(exit_to_metrics, indent=4))
+    with open(os.path.join(save_dir, 'segmentation.json'), 'w') as f:
+        json.dump(exit_to_metrics, f, indent=4)
+
+
+def show_images(original, mask, exit_to_single_class_cams, save_dir):
+    os.makedirs(save_dir, exist_ok=True)
+    imwrite(os.path.join(save_dir, 'original.jpg'), to_numpy_img(original))
+    ow, oh = original.shape[1], original.shape[2]
+
+    imwrite(os.path.join(save_dir, 'true_mask.jpg'),
+            to_numpy_img(original.detach().cpu() * interpolate(mask.detach().cpu(), oh, ow))
+            .squeeze())
+
+    for exit_ix in exit_to_single_class_cams:
+        imwrite(os.path.join(save_dir, f'pred_mask_exit_{exit_ix}.jpg'),
+                to_numpy_img(original.detach().cpu() * interpolate(torch.relu(
+                    torch.sigmoid(exit_to_single_class_cams[exit_ix]) - 0.5).detach().cpu(), oh, ow).squeeze()))
+
+
+def to_numpy_img(tensor):
+    if len(tensor.shape) == 3:
+        if tensor.shape[-1] != 3 and tensor.shape[0] == 3:
+            tensor = torch.permute(tensor, (1, 2, 0))
+
+    return (tensor.detach().cpu()).numpy()
+
+
+def imwrite(save_file, img):
+    img = cv2.normalize(img, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+
+    written = cv2.imwrite(save_file, (img * 255).astype(np.uint8))
+    if not written:
+        raise Exception(f'Could not write to {save_file}')

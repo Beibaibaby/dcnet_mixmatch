@@ -205,7 +205,7 @@ def create_image_net_datasets(dataset_cfg):
     split_to_dataset = {'val': {}, 'test': {}}
     split_to_dataset['train'] = create_image_net_dataset_for_split(dataset_cfg, 'Train')
 
-    eval_splits = ['Val', 'val_mask']
+    eval_splits = ['val_mask']
     for eval_split in eval_splits:
         split_to_dataset['val'][eval_split.lower()] = create_image_net_dataset_for_split(dataset_cfg,
                                                                                   eval_split)
