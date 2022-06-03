@@ -103,7 +103,7 @@ class ImageNetDataset(Dataset):
                         group_name = cls_dir
                     self.item_map[item_ix] = {
                         'item_ix': item_ix,
-                        'y': cls_ix,
+                        'y': torch.LongTensor([cls_ix]),
                         'file_name': os.path.join(cls_dir, img_file),
                         'group_ix': group_ix,
                         'group_name': group_name,
@@ -202,12 +202,14 @@ def create_image_net_dataset_for_split(dataset_cfg, split):
 
 
 def create_image_net_datasets(dataset_cfg):
-    split_to_dataset = {'Test': {}}
-    split_to_dataset['Train'] = create_image_net_dataset_for_split(dataset_cfg, 'Train')
+    split_to_dataset = {'val': {}, 'test': {}}
+    split_to_dataset['train'] = create_image_net_dataset_for_split(dataset_cfg, 'Train')
 
     eval_splits = ['Val', 'val_mask']
     for eval_split in eval_splits:
-        split_to_dataset['Test'][eval_split] = create_image_net_dataset_for_split(dataset_cfg,
+        split_to_dataset['val'][eval_split.lower()] = create_image_net_dataset_for_split(dataset_cfg,
+                                                                                  eval_split)
+        split_to_dataset['test'][eval_split.lower()] = create_image_net_dataset_for_split(dataset_cfg,
                                                                                   eval_split)
 
     return split_to_dataset
@@ -236,10 +238,13 @@ def create_image_net_dataloaders(config):
     config.dataset.num_groups = 1000
     split_to_datasets = create_image_net_datasets(config.dataset)
     out = {}
-    out['Train'] = create_image_net_dataloader_for_split(config.dataset, 'Train')
-    out['Test'] = {}
-    for eval_split in split_to_datasets['Test']:
-        out['Test'][eval_split] = create_image_net_dataloader_for_split(config.dataset, eval_split)
+    out['train'] = create_image_net_dataloader_for_split(config.dataset, 'Train')
+    out['val'] = {}
+    out['test'] = {}
+    for eval_split in split_to_datasets['test']:
+        out['test'][eval_split] = create_image_net_dataloader_for_split(config.dataset, eval_split)
+    for eval_split in split_to_datasets['val']:
+        out['val'][eval_split] = create_image_net_dataloader_for_split(config.dataset, eval_split)
     return out
 
 
