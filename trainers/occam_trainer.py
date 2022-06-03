@@ -72,8 +72,15 @@ class OccamTrainer(BaseTrainer):
 
     def shared_validation_step(self, batch, batch_idx, dataloader_idx=None, save_gate_stats=False):
         model_outputs = self(batch['x'])
+        cpu_model_outputs = {}
+        for k in model_outputs:
+            if isinstance(model_outputs[k], torch.Tensor):
+                cpu_model_outputs[k] = model_outputs[k].detach().cpu()
+            else:
+                cpu_model_outputs[k] = model_outputs[k]
+
         return model_outputs['early_logits'].cpu(), batch['y'].cpu(), batch['group_name'], \
-               batch['class_name'], model_outputs
+               batch['class_name'], cpu_model_outputs
 
     def shared_validation_epoch_end_single_loader(self, loader_out, loader_key):
         super().shared_validation_epoch_end_single_loader(loader_out, loader_key)
