@@ -86,6 +86,14 @@ class BaseTrainer(pl.LightningModule):
         return getattr(self, f'{split}_dataloader_keys')
 
     def get_loader_name(self, split, dataloader_idx):
+        """
+        Maps id of the dataloader (of the specified split) to its name, which is assumed to be set via set_dataloader_keys
+        :param split:
+        :param dataloader_idx:
+        :return:
+        """
+        if dataloader_idx is None:
+            dataloader_idx = 0
         if hasattr(self, f'{split}_dataloader_keys'):
             return getattr(self, f'{split}_dataloader_keys')[dataloader_idx]
         else:

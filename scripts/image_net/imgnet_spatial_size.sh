@@ -8,7 +8,7 @@ subset_percent=8
 
 for model in occam_resnet18_k9753s2 occam_resnet18_k3s2; do
   CUDA_VISIBLE_DEVICES=${GPU} python main.py \
-  model.name=occam_resnet18_k9753s2 \
+  model.name=${model} \
   trainer=occam_trainer_image_net \
   trainer.cam_suppression.loss_wt=0 \
   dataset=${dataset} \
