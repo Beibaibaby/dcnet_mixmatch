@@ -157,3 +157,26 @@ def get_target_layers(model):
         return [model.layer4[-1]]
     else:
         raise Exception(f"Specify the target layer for {type(model)}")
+
+
+def sigmoid(x):
+    return torch.sigmoid(x)
+
+
+def min_max_norm(x):
+    return (x - x.min()) / (x.max() - x.min() + 1e-5)
+
+
+def compute_heatmap(img, cam, norm_type=min_max_norm):
+    # Code from: Core risk minimization
+    assert len(img.shape) == 3
+    if img.shape[0] == 3 and img.shape[-1] != 3:
+        img = torch.permute(img, (1, 2, 0))
+
+    assert len(cam.shape) == 2  # Expects a grayscale CAM
+    if cam.shape[0] != img.shape[0] or cam.shape[1] != img.shape[1]:
+        cam = interpolate(cam, img.shape[0], img.shape[1])
+    hm = cv2.applyColorMap(np.uint8(255 * norm_type(cam).detach().cpu().numpy()), cv2.COLORMAP_JET)
+    hm = np.float32(hm) / 255
+    hm = img.detach().cpu().numpy() + hm
+    return hm / np.max(hm)
