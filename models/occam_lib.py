@@ -217,6 +217,7 @@ class MultiExitModule(nn.Module):
             exit_type=ExitModule,
             exit_gate_type=SimpleGate,
             exit_initial_conv_type=Conv2,
+            exit_hid_dims=[None, None, None, None],
             exit_width_factors=[1 / 4, 1 / 4, 1 / 4, 1 / 4],
             cam_width_factors=[1, 1, 1, 1],
             exit_scale_factors=[1, 1, 1, 1],
@@ -245,6 +246,7 @@ class MultiExitModule(nn.Module):
         self.exit_type = exit_type
         self.exit_gate_type = exit_gate_type
         self.exit_initial_conv_type = exit_initial_conv_type
+        self.exit_hid_dims = exit_hid_dims
         self.exit_width_factors = exit_width_factors
         self.cam_width_factors = cam_width_factors
         self.exit_scale_factors = exit_scale_factors
@@ -257,10 +259,13 @@ class MultiExitModule(nn.Module):
 
     def build_and_add_exit(self, in_dims):
         exit_ix = len(self.exits)
+        _hid_dims = self.exit_hid_dims[exit_ix]
+        if _hid_dims is None:
+            _hid_dims = int(in_dims * self.exit_width_factors[exit_ix])
         exit = self.exit_type(
             in_dims=in_dims,
             out_dims=self.exit_out_dims,
-            hid_dims=int(in_dims * self.exit_width_factors[exit_ix]),
+            hid_dims=_hid_dims,
             cam_hid_dims=int(in_dims * self.cam_width_factors[exit_ix]),
             kernel_size=self.exit_kernel_sizes[exit_ix],
             stride=self.exit_strides[exit_ix],

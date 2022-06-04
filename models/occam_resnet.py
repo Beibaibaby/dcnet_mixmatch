@@ -120,6 +120,28 @@ def occam_resnet18_k9753s2(num_classes):
                        })
 
 
+def occam_resnet18_hid(num_classes, hid_dims):
+    return OccamResNet(block=BasicBlock,
+                       layers=[2, 2, 2, 2],
+                       width=58,
+                       exits_kwargs={
+                           'exit_out_dims': num_classes,
+                           'exit_hid_dims': [hid_dims] * 4
+                       })
+
+
+def occam_resnet18_hid8(num_classes):
+    return occam_resnet18_hid(num_classes, 8)
+
+
+def occam_resnet18_hid16(num_classes):
+    return occam_resnet18_hid(num_classes, 16)
+
+
+def occam_resnet18_hid32(num_classes):
+    return occam_resnet18_hid(num_classes, 16)
+
+
 if __name__ == "__main__":
     m = occam_resnet18_img64(20)
     print(m)
