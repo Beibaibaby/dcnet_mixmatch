@@ -41,15 +41,11 @@ class BaseTrainer(pl.LightningModule):
     def test_step(self, batch, batch_idx, dataloader_idx=None):
         return self.shared_validation_step(batch, batch_idx, 'test', dataloader_idx)
 
-    def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, logits=None):
-        if logits is None:
-            logits = self(batch['x'])
-        if batch_idx == 0:
-            accuracy = Accuracy()
-            setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy', accuracy)
-        accuracy = getattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy')
-        accuracy.update(logits, batch['y'], batch['class_name'], batch['group_name'])
-        self.segmentation_metric_step(batch, batch_idx, logits, split, dataloader_idx=dataloader_idx)
+    def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_out=None):
+        if model_out is None:
+            model_out = self(batch['x'])
+        self.accuracy_metric_step(batch, batch_idx, model_out, split, dataloader_idx)
+        self.segmentation_metric_step(batch, batch_idx, model_out, split, dataloader_idx)
 
     def validation_epoch_end(self, outputs):
         return self.shared_validation_epoch_end(outputs, 'val')
@@ -105,6 +101,15 @@ class BaseTrainer(pl.LightningModule):
 
     def set_iters_per_epoch(self, iters_per_epoch):
         self.iters_per_epoch = iters_per_epoch
+
+    def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
+        if batch_idx == 0:
+            accuracy = Accuracy()
+            setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy', accuracy)
+        accuracy = getattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy')
+        if isinstance(model_out, dict):
+            model_out = model_out['early_logits']
+        accuracy.update(model_out, batch['y'], batch['class_name'], batch['group_name'])
 
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         if 'mask' not in batch:
