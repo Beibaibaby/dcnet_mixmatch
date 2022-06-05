@@ -226,7 +226,8 @@ class MultiExitModule(nn.Module):
             exit_scale_factors=[1, 1, 1, 1],
             exit_kernel_sizes=[3, 3, 3, 3],
             exit_strides=[None] * 4,
-            inference_earliest_exit_ix=1
+            inference_earliest_exit_ix=1,
+            downsample_factors_for_scores=[1 / 8, 1 / 4, 1 / 2, 1]
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -256,6 +257,7 @@ class MultiExitModule(nn.Module):
         self.exit_kernel_sizes = exit_kernel_sizes
         self.exit_strides = exit_strides
         self.inference_earliest_exit_ix = inference_earliest_exit_ix
+        self.downsample_factors_for_scores = downsample_factors_for_scores
         self.set_use_exit_gate(True)
         self.set_return_early_exits(False)
         self.exits = []
@@ -274,6 +276,8 @@ class MultiExitModule(nn.Module):
             stride=self.exit_strides[exit_ix],
             scale_factor=self.exit_scale_factors[exit_ix]
         )
+        if hasattr(exit, 'set_downsample_factor'):
+            exit.set_downsample_factor(self.downsample_factors_for_scores[exit_ix])
         self.exits.append(exit)
         self.exits = nn.ModuleList(self.exits)
 
@@ -364,12 +368,21 @@ class MultiExitStats:
 
 
 class SimilarityExitModule(ExitModule):
-    def __init__(self, top_k=1, top_k_type='max', similarity_fn=cosine_similarity, layer='exit_in', **kwargs):
+    def __init__(self, top_k=5, top_k_type='max', similarity_fn=cosine_similarity, layer='exit_in', **kwargs):
         super(SimilarityExitModule, self).__init__(**kwargs)
         self.top_k = top_k
         self.top_k_type = top_k_type
         self.similarity_fn = similarity_fn
         self.layer = layer
+        self.set_downsample_factor(1)
+
+    def set_downsample_factor(self, downsample_factor):
+        """
+        Feature maps are downsampled by this factor before computing similarity scores
+        :param downsample_factor:
+        :return:
+        """
+        self.downsample_factor = downsample_factor
 
     def forward(self, x, model_out={}, y=None):
         model_out = super().forward(x, model_out)
@@ -379,7 +392,11 @@ class SimilarityExitModule(ExitModule):
         hid = model_out[self.layer]
         classes = y if self.top_k_type == 'gt' else model_out['logits'].argmax(dim=-1)
         class_cams = get_class_cams_for_occam_nets(cams, classes)  # B x HW
-        class_cams = interpolate(class_cams.unsqueeze(1), hid.shape[2], hid.shape[3]).reshape(len(x), -1)  # B x HW
+        _, _, hid_h, hid_w = hid.shape
+        tar_h, tar_w = int(hid_h * self.downsample_factor), int(hid_w * self.downsample_factor)
+        hid = interpolate(hid, tar_h, tar_w)
+        class_cams = interpolate(class_cams.unsqueeze(1), tar_h, tar_w).reshape(len(x), -1)
+        # class_cams = interpolate(class_cams.unsqueeze(1), hid.shape[2], hid.shape[3]).reshape(len(x), -1)  # B x HW
 
         # Step 2: Get the highest scoring cells as reference cells
         top_k_ixs = torch.argsort(class_cams, dim=1, descending=True)[:, :self.top_k]  # B x top_k

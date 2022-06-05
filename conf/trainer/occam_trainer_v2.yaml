@@ -3,3 +3,5 @@ defaults:
 name: OccamTrainerv2
 cam_segmentation:
   loss_wt: 0.1
+cam_suppression:
+  loss_wt: 0

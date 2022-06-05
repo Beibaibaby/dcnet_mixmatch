@@ -221,7 +221,7 @@ class SegmentationMetrics:
     def __init__(self):
         self.thresh_to_metrics = {}
 
-    def update(self, gt_masks, pred_masks):
+    def update(self, gt_masks, pred_masks, h=None, w=None):
         """
         Computes iou, fg vs bg confusions and total pixels at different thresholds
 
@@ -231,6 +231,7 @@ class SegmentationMetrics:
         """
         if len(gt_masks.shape) == 4:
             gt_masks = gt_masks.mean(dim=1)
+
         B, H_g, W_g = gt_masks.shape
         _, H_p, W_p = pred_masks.shape
         if H_g != H_p or W_g != W_p:
