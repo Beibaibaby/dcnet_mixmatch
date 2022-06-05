@@ -69,8 +69,8 @@ def torch_crop_and_resize(cams, bboxes, size):
 def interpolate(x, h, w):
     if len(x.shape) == 2:
         x = x.unsqueeze(0).unsqueeze(1)
-    if len(x.shape) == 3:
-        x = x.unsqueeze(0)
+    if len(x.shape) == 3: # Assumes single-channel images
+        x = x.unsqueeze(1)
     if x.shape[2] == h and x.shape[3] == w:
         return x
     return F.interpolate(x, (h, w), mode='bilinear', align_corners=False).squeeze()
@@ -244,7 +244,7 @@ def get_early_exit_features(early_exit_names, exit_name_to_feats, H=None, W=None
     """
     resized_dict = {}
     for exit_name in exit_name_to_feats:
-        assert len(exit_name_to_feats[exit_name].shape) == 4
+        # assert len(exit_name_to_feats[exit_name].shape) == 4
         resized_dict[exit_name] = interpolate(exit_name_to_feats[exit_name], H, W)
 
     # Resize to final feat map

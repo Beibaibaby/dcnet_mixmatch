@@ -12,3 +12,5 @@ exit_gating:
   min_epochs: 1
   weight_offset: 0.1
   balance_factor: 0.5
+
+visualize_every_n_step: 5

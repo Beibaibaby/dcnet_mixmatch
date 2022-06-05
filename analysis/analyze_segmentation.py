@@ -96,125 +96,125 @@ def main_calc_segmentation_metrics(config, data_loader):
     calc_segmentation_metrics(model, data_loader, device, save_dir, config.dataset.num_classes)
 
 
-def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes, exit_to_resize_to=2,
-                              save_every=5):
-    # TODO: working on migrating to SemanticSegmentationMetrics class
-    """
-
-    :param model: Supports both OccamNets and non-Occam networks. For the latter, specify the exit layer in
-    cam_utils.get_target_layers()
-    :param data_loader: batch must contain 'x', 'y' and 'mask'
-    :param device:
-    :param save_dir:
-    :param num_classes:
-    :param exit_to_resize_to: CAMs will be resized to the CAMs from this exit
-    :return:
-    """
-    exit_to_thresh_to_details = {}
-    _viz_ix = 0
-    exit_to_acc_metric = {}
-    model = model.eval()
-
-    for batch_ix, batch in enumerate(data_loader):
-        # Gather GT class cams
-        exit_to_gt_cams, model_out = get_gt_class_cams(model, batch, device=device, target_exit_size=exit_to_resize_to)
-        exit_to_cams = {}
-
-        if 'mask' in batch:
-            gt_full_masks = batch['mask'].mean(dim=1).squeeze().detach().cpu().unsqueeze(1)
-            # GT segmentation mask
-            if 'occam' in type(model).__name__.lower():
-                resize_H, resize_W = exit_to_gt_cams[exit_to_resize_to].shape[1], \
-                                     exit_to_gt_cams[exit_to_resize_to].shape[2]
-                gt_masks = interpolate(gt_full_masks, resize_H, resize_W)
-            else:
-                resize_H, resize_W = 14, 14
-                gt_masks = interpolate(gt_full_masks, resize_H, resize_W)
-        else:
-            raise Exception("'mask' field not found: Data loader did not return the ground truth mask!")
-
-        # Gather logits for accuracy computation and CAMs for segmentation metrics
-        for exit_ix in exit_to_gt_cams:
-            key = f"E={exit_ix}, cam"
-            if isinstance(model_out, dict) and key in model_out:
-                exit_to_cams[exit_ix] = model_out[f"E={exit_ix}, cam"]
-
-            # Initialize the accuracy metric per exit
-            if exit_ix not in exit_to_thresh_to_details:
-                exit_to_thresh_to_details[exit_ix] = {}
-                exit_to_acc_metric[exit_ix] = Accuracy()
-
-            # Gather class-wise logits
-            if isinstance(model_out, dict):
-                if f"E={exit_ix}, logits" in model_out:
-                    logits = model_out[f"E={exit_ix}, logits"]
-                elif exit_ix == 'early_exit':
-                    logits = model_out['E=early, logits']
-                else:
-                    logits = model_out['logits']
-            else:
-                logits = model_out
-            exit_to_gt_cams[exit_ix] = exit_to_gt_cams[exit_ix].unsqueeze(1).detach().cpu()
-
-            # Pass CAMs through a sigmoid layer
-            gt_class_pred_mask = torch.sigmoid(exit_to_gt_cams[exit_ix])
-            gt_class_pred_mask = interpolate(gt_class_pred_mask, resize_H, resize_W)
-
-            # Compute IOUs at different thresholds (instead of only using a threshold of 0.5)
-            ious, conf_matrices, thresholds, = get_binary_ious_conf_matrix(
-                gt_masks.detach().cpu().long().flatten().numpy(),
-                gt_class_pred_mask.detach().cpu().flatten().numpy())
-
-            for iou, conf_matrix, thres in zip(ious, conf_matrices, thresholds):
-                if thres not in exit_to_thresh_to_details[exit_ix]:
-                    exit_to_thresh_to_details[exit_ix][thres] = {'iou': [],
-                                                                 'GT=fg,pred=fg': [],
-                                                                 'GT=bg,pred=bg': [],
-                                                                 'GT=fg,pred=bg': [],
-                                                                 'GT=bg,pred=fg': [],
-                                                                 'total': []}
-                exit_to_thresh_to_details[exit_ix][thres]['iou'].append(iou)
-
-                # GT: axis=1, pred: axis=0
-                exit_to_thresh_to_details[exit_ix][thres]['GT=fg,pred=fg'].append(conf_matrix[1][1])
-                exit_to_thresh_to_details[exit_ix][thres]['GT=bg,pred=bg'].append(conf_matrix[0][0])
-                exit_to_thresh_to_details[exit_ix][thres]['GT=fg,pred=bg'].append(conf_matrix[0][1])
-                exit_to_thresh_to_details[exit_ix][thres]['GT=bg,pred=fg'].append(conf_matrix[1][0])
-                exit_to_thresh_to_details[exit_ix][thres]['total'].append(conf_matrix.sum())
-
-            exit_to_acc_metric[exit_ix].update(logits, batch['y'])
-
-        if batch_ix % save_every == 0:
-            logging.getLogger().info(f"Saving from batch #: {batch_ix}")
-            show_images(batch['x'][0],
-                        gt_masks[0],
-                        {exit_ix: exit_to_gt_cams[exit_ix][0].squeeze() for exit_ix in exit_to_gt_cams},
-                        save_dir=save_dir + f'/{_viz_ix}')
-            _viz_ix += 1
-
-    # Compute and print the metrics
-    exit_to_metrics = {}
-    for exit_ix in exit_to_thresh_to_details:
-        # peak_iou, peak_conf_matrix, peak_thresh = 0, 0, 0, 0
-        peak_vals = {'iou': 0}
-
-        for thresh in exit_to_thresh_to_details[exit_ix]:
-            m_iou = np.mean(exit_to_thresh_to_details[exit_ix][thresh]['iou'])
-            if m_iou > peak_vals['iou']:
-                for k in exit_to_thresh_to_details[exit_ix][thresh]:
-                    peak_vals[k] = np.sum(exit_to_thresh_to_details[exit_ix][thresh][k]) / np.sum(
-                        exit_to_thresh_to_details[exit_ix][thresh]['total'])
-                peak_vals['iou'] = np.mean(exit_to_thresh_to_details[exit_ix][thresh]['iou'])
-                peak_vals['threshold'] = thresh
-
-        exit_to_metrics[exit_ix] = peak_vals
-        exit_to_metrics[exit_ix]['accuracy'] = exit_to_acc_metric[exit_ix].get_accuracy(),
-        exit_to_metrics[exit_ix]['mean_per_class'] = exit_to_acc_metric[exit_ix].get_mean_per_group_accuracy(
-            group_type='class')
-
-    print(json.dumps(exit_to_metrics, indent=4))
-    with open(os.path.join(save_dir, 'segmentation.json'), 'w') as f:
-        json.dump(exit_to_metrics, f, indent=4)
+# def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes, exit_to_resize_to=2,
+#                               save_every=5):
+#     # TODO: working on migrating to SemanticSegmentationMetrics class
+#     """
+#
+#     :param model: Supports both OccamNets and non-Occam networks. For the latter, specify the exit layer in
+#     cam_utils.get_target_layers()
+#     :param data_loader: batch must contain 'x', 'y' and 'mask'
+#     :param device:
+#     :param save_dir:
+#     :param num_classes:
+#     :param exit_to_resize_to: CAMs will be resized to the CAMs from this exit
+#     :return:
+#     """
+#     exit_to_thresh_to_details = {}
+#     _viz_ix = 0
+#     exit_to_acc_metric = {}
+#     model = model.eval()
+#
+#     for batch_ix, batch in enumerate(data_loader):
+#         # Gather GT class cams
+#         exit_to_gt_cams, model_out = get_gt_class_cams(model, batch, device=device, target_exit_size=exit_to_resize_to)
+#         exit_to_cams = {}
+#
+#         if 'mask' in batch:
+#             gt_full_masks = batch['mask'].mean(dim=1).squeeze().detach().cpu().unsqueeze(1)
+#             # GT segmentation mask
+#             if 'occam' in type(model).__name__.lower():
+#                 resize_H, resize_W = exit_to_gt_cams[exit_to_resize_to].shape[1], \
+#                                      exit_to_gt_cams[exit_to_resize_to].shape[2]
+#                 gt_masks = interpolate(gt_full_masks, resize_H, resize_W)
+#             else:
+#                 resize_H, resize_W = 14, 14
+#                 gt_masks = interpolate(gt_full_masks, resize_H, resize_W)
+#         else:
+#             raise Exception("'mask' field not found: Data loader did not return the ground truth mask!")
+#
+#         # Gather logits for accuracy computation and CAMs for segmentation metrics
+#         for exit_ix in exit_to_gt_cams:
+#             key = f"E={exit_ix}, cam"
+#             if isinstance(model_out, dict) and key in model_out:
+#                 exit_to_cams[exit_ix] = model_out[f"E={exit_ix}, cam"]
+#
+#             # Initialize the accuracy metric per exit
+#             if exit_ix not in exit_to_thresh_to_details:
+#                 exit_to_thresh_to_details[exit_ix] = {}
+#                 exit_to_acc_metric[exit_ix] = Accuracy()
+#
+#             # Gather class-wise logits
+#             if isinstance(model_out, dict):
+#                 if f"E={exit_ix}, logits" in model_out:
+#                     logits = model_out[f"E={exit_ix}, logits"]
+#                 elif exit_ix == 'early_exit':
+#                     logits = model_out['E=early, logits']
+#                 else:
+#                     logits = model_out['logits']
+#             else:
+#                 logits = model_out
+#             exit_to_gt_cams[exit_ix] = exit_to_gt_cams[exit_ix].unsqueeze(1).detach().cpu()
+#
+#             # Pass CAMs through a sigmoid layer
+#             gt_class_pred_mask = torch.sigmoid(exit_to_gt_cams[exit_ix])
+#             gt_class_pred_mask = interpolate(gt_class_pred_mask, resize_H, resize_W)
+#
+#             # Compute IOUs at different thresholds (instead of only using a threshold of 0.5)
+#             ious, conf_matrices, thresholds, = get_binary_ious_conf_matrix(
+#                 gt_masks.detach().cpu().long().flatten().numpy(),
+#                 gt_class_pred_mask.detach().cpu().flatten().numpy())
+#
+#             for iou, conf_matrix, thres in zip(ious, conf_matrices, thresholds):
+#                 if thres not in exit_to_thresh_to_details[exit_ix]:
+#                     exit_to_thresh_to_details[exit_ix][thres] = {'iou': [],
+#                                                                  'GT=fg,pred=fg': [],
+#                                                                  'GT=bg,pred=bg': [],
+#                                                                  'GT=fg,pred=bg': [],
+#                                                                  'GT=bg,pred=fg': [],
+#                                                                  'total': []}
+#                 exit_to_thresh_to_details[exit_ix][thres]['iou'].append(iou)
+#
+#                 # GT: axis=1, pred: axis=0
+#                 exit_to_thresh_to_details[exit_ix][thres]['GT=fg,pred=fg'].append(conf_matrix[1][1])
+#                 exit_to_thresh_to_details[exit_ix][thres]['GT=bg,pred=bg'].append(conf_matrix[0][0])
+#                 exit_to_thresh_to_details[exit_ix][thres]['GT=fg,pred=bg'].append(conf_matrix[0][1])
+#                 exit_to_thresh_to_details[exit_ix][thres]['GT=bg,pred=fg'].append(conf_matrix[1][0])
+#                 exit_to_thresh_to_details[exit_ix][thres]['total'].append(conf_matrix.sum())
+#
+#             exit_to_acc_metric[exit_ix].update(logits, batch['y'])
+#
+#         if batch_ix % save_every == 0:
+#             logging.getLogger().info(f"Saving from batch #: {batch_ix}")
+#             save_exitwise_heatmaps(batch['x'][0],
+#                                    gt_masks[0],
+#                                    {exit_ix: exit_to_gt_cams[exit_ix][0].squeeze() for exit_ix in exit_to_gt_cams},
+#                                    save_dir=save_dir + f'/{_viz_ix}')
+#             _viz_ix += 1
+#
+#     # Compute and print the metrics
+#     exit_to_metrics = {}
+#     for exit_ix in exit_to_thresh_to_details:
+#         # peak_iou, peak_conf_matrix, peak_thresh = 0, 0, 0, 0
+#         peak_vals = {'iou': 0}
+#
+#         for thresh in exit_to_thresh_to_details[exit_ix]:
+#             m_iou = np.mean(exit_to_thresh_to_details[exit_ix][thresh]['iou'])
+#             if m_iou > peak_vals['iou']:
+#                 for k in exit_to_thresh_to_details[exit_ix][thresh]:
+#                     peak_vals[k] = np.sum(exit_to_thresh_to_details[exit_ix][thresh][k]) / np.sum(
+#                         exit_to_thresh_to_details[exit_ix][thresh]['total'])
+#                 peak_vals['iou'] = np.mean(exit_to_thresh_to_details[exit_ix][thresh]['iou'])
+#                 peak_vals['threshold'] = thresh
+#
+#         exit_to_metrics[exit_ix] = peak_vals
+#         exit_to_metrics[exit_ix]['accuracy'] = exit_to_acc_metric[exit_ix].get_accuracy(),
+#         exit_to_metrics[exit_ix]['mean_per_class'] = exit_to_acc_metric[exit_ix].get_mean_per_group_accuracy(
+#             group_type='class')
+#
+#     print(json.dumps(exit_to_metrics, indent=4))
+#     with open(os.path.join(save_dir, 'segmentation.json'), 'w') as f:
+#         json.dump(exit_to_metrics, f, indent=4)
 
 
 class SegmentationMetrics:
@@ -276,24 +276,32 @@ class SegmentationMetrics:
         return peak_vals
 
 
-def show_images(original, gt_mask, exit_to_single_class_cams, save_dir):
+def save_exitwise_heatmaps(original, gt_mask, exit_to_heatmaps, save_dir, heat_map_suffix=''):
+    """
+
+    :param original: original image where the heatmaps will be placed
+    :param gt_mask:
+    :param exit_to_heatmaps:
+    :param save_dir:
+    :param heat_map_suffix:
+    :return:
+    """
     os.makedirs(save_dir, exist_ok=True)
     imwrite(os.path.join(save_dir, 'original.jpg'), to_numpy_img(original))
     ow, oh = original.shape[1], original.shape[2]
     original = (original - original.min()) / (original.max() - original.min())
 
     # Only show regions present in the gt mask
-    _inter_mask = torch.relu(interpolate(gt_mask.detach().cpu(), oh, ow) - 0.5)
+    _inter_mask = torch.relu(interpolate(gt_mask.unsqueeze(0).detach().cpu(), oh, ow) - 0.5).squeeze()
     imwrite(os.path.join(save_dir, 'true_mask.jpg'),
-            to_numpy_img(original.detach().cpu() * _inter_mask.unsqueeze(0))
+            to_numpy_img(original.detach().cpu() * _inter_mask)
             .squeeze())
 
-    #
-    for exit_ix in exit_to_single_class_cams:
-        # _exit_cam = torch.relu(
-        #     torch.sigmoid(interpolate(exit_to_single_class_cams[exit_ix], oh, ow).detach().cpu()) - 0.5)
-        _exit_hm = compute_heatmap(original, exit_to_single_class_cams[exit_ix])
-        imwrite(os.path.join(save_dir, f'hm_exit_{exit_ix}.jpg'), _exit_hm)
+    # Heat maps
+    for exit_ix in exit_to_heatmaps:
+        _exit_hm = compute_heatmap(original, exit_to_heatmaps[exit_ix])
+        imwrite(os.path.join(save_dir, f'hm_exit_{exit_ix}{heat_map_suffix}.jpg'), _exit_hm)
+        # print(f"Saved to {save_dir}")
 
 
 def to_numpy_img(tensor):

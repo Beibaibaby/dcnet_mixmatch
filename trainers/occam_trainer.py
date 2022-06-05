@@ -1,9 +1,11 @@
+import os
+
 from trainers.base_trainer import BaseTrainer
 import torch
 import torch.nn.functional as F
 from utils.metrics import Accuracy
 from models.occam_lib import MultiExitStats
-from analysis.analyze_segmentation import SegmentationMetrics
+from analysis.analyze_segmentation import SegmentationMetrics, save_exitwise_heatmaps
 from utils.cam_utils import get_class_cams_for_occam_nets, get_early_exit_cams
 
 
@@ -95,6 +97,7 @@ class OccamTrainer(BaseTrainer):
         loader_key = self.get_loader_name(split, dataloader_idx)
 
         # Per-exit segmentation metrics
+        exit_to_class_cams = {}
         for exit_name in self.model.multi_exit.get_exit_names():
             metric_key = f'{exit_name}_{split}_{loader_key}_segmentation_metrics'
             if batch_idx == 0:
@@ -102,8 +105,27 @@ class OccamTrainer(BaseTrainer):
             gt_masks = batch['mask']
             classes = batch['y'] if self.trainer_cfg.segmentation_class_type == 'gt' else model_out[
                 f"{exit_name}, logits"].argmax(dim=-1)
-            getattr(self, metric_key).update(gt_masks,
-                                             get_class_cams_for_occam_nets(model_out[f"{exit_name}, cam"], classes))
+            class_cams = get_class_cams_for_occam_nets(model_out[f"{exit_name}, cam"], classes)
+            getattr(self, metric_key).update(gt_masks, class_cams)
+            exit_to_class_cams[exit_name] = class_cams
+        self.save_heat_maps_step(batch_idx, batch, exit_to_class_cams)
+
+    def save_heat_maps_step(self, batch_idx, batch, exit_to_heat_maps, heat_map_suffix=''):
+        """
+        Saves the original image, GT mask and the predicted CAMs for the first sample in the batch
+        :param batch_idx:
+        :param batch:
+        :param exit_to_heat_maps:
+        :return:
+        """
+        _exit_to_heat_maps = {}
+        if batch_idx % self.config.trainer.visualize_every_n_step == 0:
+            original = batch['x'][0]
+            gt_mask = batch['mask'][0]
+            for en in exit_to_heat_maps:
+                _exit_to_heat_maps[en] = exit_to_heat_maps[en][0]
+            save_dir = os.path.join(os.getcwd(), f'visualizations/{batch_idx}')
+            save_exitwise_heatmaps(original, gt_mask, _exit_to_heat_maps, save_dir, heat_map_suffix=heat_map_suffix)
 
     def segmentation_metric_epoch_end(self, split, loader_key):
         for exit_name in self.model.multi_exit.get_exit_names():

@@ -82,12 +82,13 @@ class OccamTrainerv2(OccamTrainer):
                 ref_h, ref_w = model_out[ref_feat_key].shape[2], model_out[ref_feat_key].shape[3]
                 ref_mask_key = f'{exit_name}, ref_mask_scores'
                 ref_feat_masks = model_out[ref_mask_key].reshape(len(batch['x']), ref_h, ref_w)
-                exit_name_to_mask_scores[exit_name] = ref_feat_masks.unsqueeze(1)
             else:
                 ref_feat_masks = get_early_exit_features(model_out['early_exit_names'], exit_name_to_mask_scores,
                                                          ref_h, ref_w).reshape(len(batch['x']), ref_h, ref_w)
+            exit_name_to_mask_scores[exit_name] = ref_feat_masks
 
             getattr(self, metric_key).update(gt_masks, ref_feat_masks)
+        self.save_heat_maps_step(batch_idx, batch, exit_name_to_mask_scores, heat_map_suffix='_inter_sim')
 
     def segmentation_metric_epoch_end(self, split, loader_key):
         super().segmentation_metric_epoch_end(split, loader_key)
