@@ -214,6 +214,28 @@ def get_class_cams_for_occam_nets(cams, classes):
     return class_cams
 
 
+def get_early_exit_cams(model_out, H=None, W=None):
+    """
+    Returns the CAMs from the early exits
+    :param model_out: Should contain cams from different exits named as 'exit_name, cam' and
+    early_exit_names specifying the name of early exit for each sample
+    :param H:
+    :param W:
+    :return:
+    """
+    ee_names = model_out['early_exit_names']
+    cam_dict = {}
+    for k in model_out.keys():
+        if 'cam' in k:
+            cam_dict[k] = interpolate(model_out[k].detach().cpu(), H, W)
+
+    ee_cams = torch.zeros((len(ee_names), model_out[k].shape[1], H, W))
+    for ix, ee_name in enumerate(ee_names):
+        cam_key = f"{ee_name}, cam"
+        ee_cams[ix] = cam_dict[cam_key][ix]
+    return ee_cams
+
+
 def get_class_cams(x, model, classes):
     grad_cam = GradCAM(model=model, target_layers=get_target_layers(model))
     targets = [ClassifierOutputTarget(int(y)) for y in classes]

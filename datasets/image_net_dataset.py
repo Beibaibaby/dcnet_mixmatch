@@ -206,10 +206,8 @@ def create_image_net_datasets(dataset_cfg):
 
     eval_splits = ['val_mask', 'val']
     for eval_split in eval_splits:
-        split_to_dataset['val'][eval_split.lower()] = create_image_net_dataset_for_split(dataset_cfg,
-                                                                                  eval_split)
-        split_to_dataset['test'][eval_split.lower()] = create_image_net_dataset_for_split(dataset_cfg,
-                                                                                  eval_split)
+        split_to_dataset['val'][eval_split.lower()] = create_image_net_dataset_for_split(dataset_cfg, eval_split)
+        split_to_dataset['test'][eval_split.lower()] = create_image_net_dataset_for_split(dataset_cfg, eval_split)
 
     return split_to_dataset
 

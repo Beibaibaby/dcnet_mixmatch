@@ -44,14 +44,14 @@ def exec(cfg: DictConfig) -> None:
 
     # Commented out unsupported/yet-to-support tasks
     if cfg.task.name == 'test':
-        data_loaders = dataloader_factory.build_dataloaders(cfg)
+        loader = dataloader_factory.build_dataloader_for_split(cfg, cfg.data_sub_split)
         trainer = trainer_factory.load_trainer(cfg)
-        trainer.set_dataloader_keys(cfg.data_split, list(data_loaders[cfg.data_split].keys()))
+        trainer.set_dataloader_keys(cfg.data_split, [cfg.data_sub_split])
         pl_trainer = pl.Trainer(gpus=cfg.gpus,
                                 limit_train_batches=cfg.trainer.limit_train_batches,
                                 limit_val_batches=cfg.trainer.limit_val_batches,
                                 limit_test_batches=cfg.trainer.limit_test_batches)
-        pl_trainer.test(trainer, list(data_loaders[cfg.data_split].values()))
+        pl_trainer.test(trainer, [loader])
 
     elif cfg.task.name == 'analyze_segmentation':
         from analysis.analyze_segmentation import main_calc_segmentation_metrics

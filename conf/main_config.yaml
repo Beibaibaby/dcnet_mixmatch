@@ -10,6 +10,7 @@ checkpoint_path: null
 load_model_only: false
 strict_load_mode: True
 data_split: 'test'
+data_sub_split: 'test'
 gpus: 1
 #calibration_split: 'Val'
 test_only_epoch: ${optimizer.epochs}

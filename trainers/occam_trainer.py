@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from utils.metrics import Accuracy
 from models.occam_lib import MultiExitStats
 from analysis.analyze_segmentation import SegmentationMetrics
-from utils.cam_utils import get_class_cams_for_occam_nets
+from utils.cam_utils import get_class_cams_for_occam_nets, get_early_exit_cams
 
 
 class OccamTrainer(BaseTrainer):
@@ -90,10 +90,12 @@ class OccamTrainer(BaseTrainer):
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         if 'mask' not in batch:
             return
-        dataloader_key = self.get_loader_name(split, dataloader_idx)
+        loader_key = self.get_loader_name(split, dataloader_idx)
         num_exits = len(self.model.multi_exit.exit_block_nums)
+
+        # Per-exit segmentation metrics
         for exit_ix in range(num_exits):
-            metric_key = f'E{exit_ix}_{split}_{dataloader_key}_segmentation_metrics'
+            metric_key = f'E={exit_ix}_{split}_{loader_key}_segmentation_metrics'
             if batch_idx == 0:
                 setattr(self, metric_key, SegmentationMetrics())
             gt_masks = batch['mask']
@@ -102,14 +104,33 @@ class OccamTrainer(BaseTrainer):
             getattr(self, metric_key).update(gt_masks, get_class_cams_for_occam_nets(model_out[f"E={exit_ix}, cam"],
                                                                                      classes))
 
+        # Early exit segmentation metrics
+        _, _, h, w = model_out[f'E={num_exits - 1}, cam'].shape
+        ee_cams = get_early_exit_cams(model_out, H=h, W=w)
+        metric_key = f'E=early_{split}_{loader_key}_segmentation_metrics'
+        if batch_idx == 0:
+            setattr(self, metric_key, SegmentationMetrics())
+        gt_masks = batch['mask']
+        classes = batch['y'] if self.trainer_cfg.segmentation_class_type == 'gt' else model_out[
+            f"early_logits"].argmax(dim=-1)
+        getattr(self, metric_key).update(gt_masks, get_class_cams_for_occam_nets(ee_cams, classes))
+
     def segmentation_metric_epoch_end(self, split, loader_key):
         num_exits = len(self.model.multi_exit.exit_block_nums)
+        # Log per-exit segmentation metrics
         for exit_ix in range(num_exits):
-            metric_key = f'E{exit_ix}_{split}_{loader_key}_segmentation_metrics'
+            metric_key = f'E={exit_ix}_{split}_{loader_key}_segmentation_metrics'
             if hasattr(self, metric_key):
                 seg_metric_vals = getattr(self, metric_key).summary()
                 for sk in seg_metric_vals:
-                    self.log(f"E{exit_ix} {sk}", seg_metric_vals[sk])
+                    self.log(f"E={exit_ix} {sk}", seg_metric_vals[sk])
+
+        # Log early exit segmentation metrics
+        metric_key = f'E=early_{split}_{loader_key}_segmentation_metrics'
+        if hasattr(self, metric_key):
+            seg_metric_vals = getattr(self, metric_key).summary()
+            for sk in seg_metric_vals:
+                self.log(f"E=early {sk}", seg_metric_vals[sk])
 
 
 class GateWeightedCELoss():
