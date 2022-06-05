@@ -3,6 +3,9 @@ alias: ${trainer.name}
 #save_model_every: ${optimizer.epochs}
 #save_predictions_every: ${optimizer.epochs}
 check_val_every_n_epoch: 10
+limit_train_batches: null
+limit_val_batches: null
+limit_test_batches: null
 #test_epochs: null
 #early_stopping_split: 'Val' # Saves a checkpoint with best accuracy on this split
 #classification_loss_wt: 1.0
@@ -18,3 +21,4 @@ use_mixed_precision: False # Set to true to use mixed precision training
 loss:
   name: CrossEntropyLoss
 track_loss: False
+segmentation_class_type: 'max' # 'gt'

@@ -47,7 +47,10 @@ def exec(cfg: DictConfig) -> None:
         data_loaders = dataloader_factory.build_dataloaders(cfg)
         trainer = trainer_factory.load_trainer(cfg)
         trainer.set_dataloader_keys(cfg.data_split, list(data_loaders[cfg.data_split].keys()))
-        pl_trainer = pl.Trainer(gpus=cfg.gpus)
+        pl_trainer = pl.Trainer(gpus=cfg.gpus,
+                                limit_train_batches=cfg.trainer.limit_train_batches,
+                                limit_val_batches=cfg.trainer.limit_val_batches,
+                                limit_test_batches=cfg.trainer.limit_test_batches)
         pl_trainer.test(trainer, list(data_loaders[cfg.data_split].values()))
 
     elif cfg.task.name == 'analyze_segmentation':
@@ -111,7 +114,10 @@ def exec(cfg: DictConfig) -> None:
                                 min_epochs=cfg.optimizer.epochs,
                                 max_epochs=cfg.optimizer.epochs,
                                 check_val_every_n_epoch=cfg.trainer.check_val_every_n_epoch,
-                                num_sanity_val_steps=0
+                                num_sanity_val_steps=0,
+                                limit_train_batches=cfg.trainer.limit_train_batches,
+                                limit_val_batches=cfg.trainer.limit_val_batches,
+                                limit_test_batches=cfg.trainer.limit_test_batches
                                 )
 
         pl_trainer.fit(trainer,

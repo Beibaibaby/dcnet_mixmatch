@@ -8,6 +8,8 @@ from utils import optimizer_factory
 from utils.metrics import Accuracy
 import json
 from utils import lr_schedulers
+from analysis.analyze_segmentation import SegmentationMetrics
+from utils.cam_utils import get_class_cams
 
 
 class BaseTrainer(pl.LightningModule):
@@ -47,6 +49,7 @@ class BaseTrainer(pl.LightningModule):
             setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy', accuracy)
         accuracy = getattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy')
         accuracy.update(logits, batch['y'], batch['class_name'], batch['group_name'])
+        self.segmentation_metric_step(batch, batch_idx, logits, split, dataloader_idx=dataloader_idx)
 
     def validation_epoch_end(self, outputs):
         return self.shared_validation_epoch_end(outputs, 'val')
@@ -64,6 +67,7 @@ class BaseTrainer(pl.LightningModule):
             os.makedirs(save_dir, exist_ok=True)
             with open(os.path.join(save_dir, f'ep_{self.current_epoch}.json'), 'w') as f:
                 json.dump(detailed, f, indent=True, sort_keys=True)
+            self.segmentation_metric_epoch_end(split, loader_key)
 
     def configure_optimizers(self):
         named_params = self.model.named_parameters()
@@ -101,3 +105,24 @@ class BaseTrainer(pl.LightningModule):
 
     def set_iters_per_epoch(self, iters_per_epoch):
         self.iters_per_epoch = iters_per_epoch
+
+    def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
+        if 'mask' not in batch:
+            return
+        dataloader_key = self.get_loader_name(split, dataloader_idx)
+        metric_key = f'{split}_{dataloader_key}_segmentation_metrics'
+        if batch_idx == 0:
+            setattr(self, metric_key, SegmentationMetrics())
+        gt_masks = batch['mask']
+        classes = batch['y'] if self.trainer_cfg.segmentation_class_type == 'gt' else model_out.argmax(dim=-1)
+        torch.set_grad_enabled(True)
+        getattr(self, metric_key).update(gt_masks, get_class_cams(batch['x'], self.model, classes))
+        torch.set_grad_enabled(False)
+
+    def segmentation_metric_epoch_end(self, split, loader_key):
+        # Log segmentation metrics
+        metric_key = f'{split}_{loader_key}_segmentation_metrics'
+        if hasattr(self, metric_key):
+            seg_metric_vals = getattr(self, metric_key).summary()
+            for sk in seg_metric_vals:
+                self.log(f"{sk}", seg_metric_vals[sk])

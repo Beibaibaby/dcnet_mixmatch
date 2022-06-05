@@ -214,6 +214,12 @@ def get_class_cams_for_occam_nets(cams, classes):
     return class_cams
 
 
+def get_class_cams(x, model, classes):
+    grad_cam = GradCAM(model=model, target_layers=get_target_layers(model))
+    targets = [ClassifierOutputTarget(int(y)) for y in classes]
+    return torch.from_numpy(grad_cam(input_tensor=x, targets=targets))
+
+
 def imwrite(save_file, img):
     dir = get_dir(save_file)
     os.makedirs(dir, exist_ok=True)
