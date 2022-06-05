@@ -236,6 +236,25 @@ def get_early_exit_cams(model_out, H=None, W=None):
     return ee_cams
 
 
+def get_early_exit_features(early_exit_names, exit_name_to_feats, H=None, W=None):
+    """
+    Returns the features for the early exits
+    :param early_exit_names: Early exit name for each sample
+    :param exit_name_to_feats: A dictionary mapping exit_name to features, each feat: BxDxHxW
+    """
+    resized_dict = {}
+    for exit_name in exit_name_to_feats:
+        assert len(exit_name_to_feats[exit_name].shape) == 4
+        resized_dict[exit_name] = interpolate(exit_name_to_feats[exit_name], H, W)
+
+    # Resize to final feat map
+    early_exit_feats = torch.zeros((len(early_exit_names), resized_dict[exit_name].shape[1], H, W)).to(
+        resized_dict[exit_name].device)
+    for ix, exit_name in enumerate(early_exit_names):
+        early_exit_feats[ix] = resized_dict[exit_name][ix]
+    return early_exit_feats
+
+
 def get_class_cams(x, model, classes):
     grad_cam = GradCAM(model=model, target_layers=get_target_layers(model))
     targets = [ClassifierOutputTarget(int(y)) for y in classes]

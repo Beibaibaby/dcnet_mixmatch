@@ -108,7 +108,7 @@ class BaseTrainer(pl.LightningModule):
             setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy', accuracy)
         accuracy = getattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy')
         if isinstance(model_out, dict):
-            model_out = model_out['early_logits']
+            model_out = model_out['E=early, logits']
         accuracy.update(model_out, batch['y'], batch['class_name'], batch['group_name'])
 
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):

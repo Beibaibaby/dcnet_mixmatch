@@ -324,8 +324,15 @@ class MultiExitModule(nn.Module):
         early_exit_logits = get_early_exit_values(exit_num_to_logits, early_exit_ixs)
         early_exit_names = [exit_num_to_name[int(ix)] for ix in early_exit_ixs]
         exit_outs['early_exit_names'] = early_exit_names
-        exit_outs['early_logits'] = early_exit_logits
+        exit_outs['E=early, logits'] = early_exit_logits
+        _, _, final_h, final_w = exit_outs[f'E={len(self.exit_block_nums) - 1}, cam'].shape
+        exit_outs['E=early, cam'] = get_early_exit_cams(exit_outs, final_h, final_w)
         return exit_outs
+
+    def get_exit_names(self):
+        names = [f'E={exit_ix}' for exit_ix in range(len(self.exit_block_nums))]
+        names.append('E=early')
+        return names
 
 
 class MultiExitStats:
@@ -405,4 +412,3 @@ def visualize_reference_masks(img, sim_scores, top_k_cells, mask_h, mask_w, save
 
     score_hm = compute_heatmap(img, sim_scores.reshape(mask_h, mask_w))
     imwrite(os.path.join(save_path + "_similarity.jpg"), score_hm)
-
