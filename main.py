@@ -46,9 +46,9 @@ def exec(cfg: DictConfig) -> None:
     if cfg.task.name == 'test':
         data_loaders = dataloader_factory.build_dataloaders(cfg)
         trainer = trainer_factory.load_trainer(cfg)
-        trainer.set_dataloader_keys('test', list(data_loaders['test'].keys()))
+        trainer.set_dataloader_keys(cfg.data_split, list(data_loaders[cfg.data_split].keys()))
         pl_trainer = pl.Trainer(gpus=cfg.gpus)
-        pl_trainer.test(trainer, list(data_loaders['test'].values()))
+        pl_trainer.test(trainer, list(data_loaders[cfg.data_split].values()))
 
     elif cfg.task.name == 'analyze_segmentation':
         from analysis.analyze_segmentation import main_calc_segmentation_metrics

@@ -3,6 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from utils.metrics import Accuracy, GateMetric
+from utils.cam_utils import *
+import os
+from utils.data_utils import get_dir
 
 
 class ExitDataTypes:
@@ -174,7 +177,7 @@ class ExitModule(nn.Module):
                                        norm_type=self.gate_norm_type,
                                        non_linearity_type=self.gate_non_linearity_type)
 
-    def forward(self, x, out={}):
+    def forward(self, x, out={}, y=None):
         """
         Returns CAM, logits and gate
         :param x:
@@ -283,7 +286,7 @@ class MultiExitModule(nn.Module):
     def set_return_early_exits(self, return_early_exits):
         self.return_early_exits = return_early_exits
 
-    def forward(self, block_num_to_exit_in):
+    def forward(self, block_num_to_exit_in, y=None):
         exit_outs = {}
         exit_ix = 0
         for block_num in block_num_to_exit_in:
@@ -291,7 +294,7 @@ class MultiExitModule(nn.Module):
                 exit_in = block_num_to_exit_in[block_num]
                 if exit_ix in self.detached_exit_ixs:
                     exit_in = exit_in.detach()
-                exit_out = self.exits[exit_ix](exit_in)
+                exit_out = self.exits[exit_ix](exit_in, y=y)
                 for k in exit_out:
                     exit_outs[f"E={exit_ix}, {k}"] = exit_out[k]
                 exit_ix += 1
@@ -351,3 +354,55 @@ class MultiExitStats:
                 for k2 in self.exit_ix_to_stats[exit_ix][k].summary():
                     exit_to_summary[f"E={exit_ix} {k2}"] = self.exit_ix_to_stats[exit_ix][k].summary()[k2]
         return exit_to_summary
+
+
+class SimilarityExitModule(ExitModule):
+    def __init__(self, top_k=2, top_k_type='max', similarity_fn=cosine_similarity, layer='exit_in', **kwargs):
+        super(SimilarityExitModule, self).__init__(**kwargs)
+        self.top_k = top_k
+        self.top_k_type = top_k_type
+        self.similarity_fn = similarity_fn
+        self.layer = layer
+
+    def forward(self, x, model_out={}, y=None):
+        model_out = super().forward(x, model_out)
+
+        # Step 1: Get CAMs of either the GT or the highest scoring classes
+        cams = model_out['cam']  # B x C x H x W
+        hid = model_out[self.layer]
+        classes = y if self.top_k_type == 'gt' else model_out['logits'].argmax(dim=-1)
+        class_cams = get_class_cams_for_occam_nets(cams, classes)  # B x HW
+        class_cams = interpolate(class_cams.unsqueeze(1), hid.shape[2], hid.shape[3]).reshape(len(x), -1)  # B x HW
+
+        # Step 2: Get the highest scoring cells as reference cells
+        top_k_ixs = torch.argsort(class_cams, dim=1, descending=True)[:, :self.top_k]  # B x top_k
+        flat_hid = hid.reshape(hid.shape[0], hid.shape[1], -1)  # B x dims x hw
+
+        # Step 3: Generate a map to train localization of CAM
+        flat_hid_top_k = torch.gather(flat_hid, dim=2, index=top_k_ixs.unsqueeze(1).repeat(1, flat_hid.shape[1], 1))
+        similarity = self.similarity_fn(flat_hid, flat_hid_top_k)  # total_cells x top_k
+        model_out['ref_mask_top_k_cells'] = top_k_ixs
+        model_out['ref_hid'] = hid
+        model_out['ref_mask_scores'] = similarity
+        return model_out
+
+
+def visualize_reference_masks(img, sim_scores, top_k_cells, mask_h, mask_w, save_path):
+    """
+
+    :param img: Original image (3 x H x W)
+    :param sim_scores: total score for each cell (shape=mask_h * mask_w)
+    :param top_k_cells: Locations of flattened spatial cells
+    :param mask_h, mask_w = spatial dims of reference mask
+    :return:
+    """
+    img = (img - img.min()) / (img.max() - img.min())
+    mask_top_k_cells = torch.zeros(mask_h * mask_w).to(img.device)
+    mask_top_k_cells[top_k_cells] = 1
+    mask_top_k_cells = mask_top_k_cells.reshape(mask_h, mask_w)
+    hm = compute_heatmap(img, mask_top_k_cells)
+    imwrite(os.path.join(save_path + "_top_k_cells.jpg"), hm)
+
+    score_hm = compute_heatmap(img, sim_scores.reshape(mask_h, mask_w))
+    imwrite(os.path.join(save_path + "_similarity.jpg"), score_hm)
+

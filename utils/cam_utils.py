@@ -1,9 +1,11 @@
+import os
 import numpy as np
 import torch
 import cv2
 import torch.nn.functional as F
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from utils.data_utils import get_dir
 
 
 def cams_to_masks(cams, threshold=None):
@@ -180,3 +182,43 @@ def compute_heatmap(img, cam, norm_type=min_max_norm):
     hm = np.float32(hm) / 255
     hm = img.detach().cpu().numpy() + hm
     return hm / np.max(hm)
+
+
+def cosine_similarity(tensor1, tensor2):
+    """
+    Measures similarity between each cell in tensor1 with every other cell of the same sample in tensor2
+    :param tensor1: B x D x HW
+    :param tensor2: B x D x k
+    :return: Cosine similarity between each HW with each k
+    """
+    assert tensor1.shape[1] == tensor2.shape[1]
+    cosine = F.normalize(tensor1, dim=1).permute(0, 2, 1) @ F.normalize(tensor2, dim=1)
+    return cosine.sum(dim=2)
+
+
+def get_class_cams_for_occam_nets(cams, classes):
+    """
+    Returns CAMs for OccamNets and GradCAMs for other models for given classes
+    :param cams: B x C x H x W
+    :param classes: gathers CAM for these classes
+    :return:
+    """
+    if isinstance(classes, list):
+        classes = torch.LongTensor(classes, device=cams.device)
+    if classes.device != cams.device:
+        classes = classes.to(cams.device)
+
+    _classes = classes.squeeze().unsqueeze(1).unsqueeze(2).unsqueeze(3) \
+        .repeat(1, 1, cams.shape[2], cams.shape[3])
+    class_cams = cams.gather(1, _classes).squeeze()
+    return class_cams
+
+
+def imwrite(save_file, img):
+    dir = get_dir(save_file)
+    os.makedirs(dir, exist_ok=True)
+    img = cv2.normalize(img, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+
+    written = cv2.imwrite(save_file, (img * 255).astype(np.uint8))
+    if not written:
+        raise Exception(f'Could not write to {save_file}')

@@ -47,7 +47,7 @@ class OccamResNet(VariableWidthResNet):
                 nn.init.constant_(m.weight, 1.)
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x):
+    def forward(self, x, y=None):
         block_num_to_exit_in = {}
         x = self.conv1(x)
         x = self.bn1(x)
@@ -59,7 +59,7 @@ class OccamResNet(VariableWidthResNet):
             x = getattr(self, f'layer{i + 1}')(x)
             block_num_to_exit_in[i] = x
 
-        return self.multi_exit(block_num_to_exit_in)
+        return self.multi_exit(block_num_to_exit_in, y=y)
 
     def get_multi_exit(self):
         return self.multi_exit
@@ -78,56 +78,43 @@ def occam_resnet18_img64(num_classes):
                        })
 
 
-def occam_resnet18(num_classes):
+def occam_resnet18(num_classes, width=58, exits_kwargs={}):
+    if 'exit_out_dims' not in exits_kwargs:
+        exits_kwargs['exit_out_dims'] = num_classes
     return OccamResNet(block=BasicBlock,
                        layers=[2, 2, 2, 2],
-                       width=58,
-                       exits_kwargs={
-                           'exit_out_dims': num_classes,
-                       })
+                       width=width,
+                       exits_kwargs=exits_kwargs)
+
+
+def occam_resnet18_v2(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={
+        'exit_type': SimilarityExitModule})
 
 
 # Change stride/kernel size
 def occam_resnet18_k3s2(num_classes):
-    return OccamResNet(block=BasicBlock,
-                       layers=[2, 2, 2, 2],
-                       width=58,
-                       exits_kwargs={
-                           'exit_out_dims': num_classes,
-                           'exit_kernel_sizes': [3] * 4,
-                           'exit_strides': [2] * 4
-                       })
+    return occam_resnet18(num_classes,
+                          exits_kwargs={
+                              'exit_kernel_sizes': [3] * 4,
+                              'exit_strides': [2] * 4})
 
 
 def occam_resnet18_k5s2(num_classes):
-    return OccamResNet(block=BasicBlock,
-                       layers=[2, 2, 2, 2],
-                       width=58,
-                       exits_kwargs={
-                           'exit_out_dims': num_classes,
-                           'exit_kernel_sizes': [5] * 4,
-                           'exit_strides': [2] * 4
-                       })
+    return occam_resnet18(num_classes,
+                          exits_kwargs={
+                              'exit_kernel_sizes': [5] * 4,
+                              'exit_strides': [2] * 4})
 
 
 def occam_resnet18_k9753s2(num_classes):
-    return OccamResNet(block=BasicBlock,
-                       layers=[2, 2, 2, 2],
-                       width=58,
-                       exits_kwargs={
-                           'exit_out_dims': num_classes,
-                           'exit_kernel_sizes': [9, 7, 5, 3]
-                       })
+    return occam_resnet18(num_classes,
+                          exits_kwargs={
+                              'exit_kernel_sizes': [9, 7, 5, 3]})
 
 
 def occam_resnet18_hid(num_classes, hid_dims):
-    return OccamResNet(block=BasicBlock,
-                       layers=[2, 2, 2, 2],
-                       width=58,
-                       exits_kwargs={
-                           'exit_out_dims': num_classes,
-                           'exit_hid_dims': [hid_dims] * 4
-                       })
+    return occam_resnet18(num_classes, exits_kwargs={'exit_hid_dims': [hid_dims] * 4})
 
 
 def occam_resnet18_hid8(num_classes):

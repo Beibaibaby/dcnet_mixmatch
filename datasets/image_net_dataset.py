@@ -170,7 +170,6 @@ def create_image_net_dataset_for_split(dataset_cfg, split):
     if 'train' in split.lower():
         augmentation_cfg = dataset_cfg.augmentations
         train_transform = build_transformation_list(augmentation_cfg, image_size=dataset_cfg.image_size)[0]
-        print(train_transform)
         train_transform.append(normalize)
         train_transform = transforms.Compose(train_transform)
         return ImageNetDataset(data_dir,
@@ -205,7 +204,7 @@ def create_image_net_datasets(dataset_cfg):
     split_to_dataset = {'val': {}, 'test': {}}
     split_to_dataset['train'] = create_image_net_dataset_for_split(dataset_cfg, 'Train')
 
-    eval_splits = ['val_mask']
+    eval_splits = ['val_mask', 'val']
     for eval_split in eval_splits:
         split_to_dataset['val'][eval_split.lower()] = create_image_net_dataset_for_split(dataset_cfg,
                                                                                   eval_split)

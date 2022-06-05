@@ -8,7 +8,7 @@ from sklearn.metrics import confusion_matrix
 from utils.model_utils import load_checkpoint
 
 
-def get_binary_ious_conf_matrix(gt_mask, pred_mask):
+def get_binary_ious_conf_matrix(gt_mask, pred_mask, all_thresholds=np.arange(0, 1, 1 / 10)):
     """
     Assuming binary gt_mask and a prediction mask between 0-1, it computes IOU at different thresholds
 
@@ -19,7 +19,7 @@ def get_binary_ious_conf_matrix(gt_mask, pred_mask):
     ious, conf_matrices, thresholds = [], [], []
     labels = [0, 1]
 
-    for thresh in np.arange(0, 1, 1 / 10):
+    for thresh in all_thresholds:
         bin_pred_mask = (pred_mask > thresh).astype(np.int)
         conf_matrix_fn = RunningConfusionMatrix(labels=labels)
 
@@ -96,9 +96,9 @@ def main_calc_segmentation_metrics(config, data_loader):
     calc_segmentation_metrics(model, data_loader, device, save_dir, config.dataset.num_classes)
 
 
-# TODO: clean up
 def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes, exit_to_resize_to=2,
                               save_every=5):
+    # TODO: working on migrating to SemanticSegmentationMetrics class
     """
 
     :param model: Supports both OccamNets and non-Occam networks. For the latter, specify the exit layer in
@@ -215,6 +215,65 @@ def calc_segmentation_metrics(model, data_loader, device, save_dir, num_classes,
     print(json.dumps(exit_to_metrics, indent=4))
     with open(os.path.join(save_dir, 'segmentation.json'), 'w') as f:
         json.dump(exit_to_metrics, f, indent=4)
+
+
+class SegmentationMetrics:
+    def __init__(self):
+        self.thresh_to_metrics = {}
+
+    def update(self, gt_masks, pred_masks):
+        """
+        Computes iou, fg vs bg confusions and total pixels at different thresholds
+
+        :param gt_masks: B x H_g x W_g or B x 3 x H_g x W_g
+        :param pred_masks: B x H_p x W_p
+        :return:
+        """
+        if len(gt_masks.shape) == 4:
+            gt_masks = gt_masks.mean(dim=1)
+        B, H_g, W_g = gt_masks.shape
+        _, H_p, W_p = pred_masks.shape
+        if H_g != H_p or W_g != W_p:
+            # pred_masks = interpolate(pred_masks.unsqueeze(1), H_g, W_g).reshape(B, H_g, W_g)
+            gt_masks = interpolate(gt_masks.unsqueeze(1), H_p, W_p).reshape(B, H_p, W_p)
+        ious, conf_matrices, thresholds = get_binary_ious_conf_matrix(gt_masks.detach().cpu().long().flatten().numpy(),
+                                                                      pred_masks.detach().cpu().flatten().numpy())
+        for iou, conf_matrix, thresh in zip(ious, conf_matrices, thresholds):
+            if thresh not in self.thresh_to_metrics:
+                self.thresh_to_metrics[thresh] = {'iou': [],
+                                                  'GT=fg,pred=fg': [],
+                                                  'GT=bg,pred=bg': [],
+                                                  'GT=fg,pred=bg': [],
+                                                  'GT=bg,pred=fg': [],
+                                                  'total': []}
+            self.thresh_to_metrics[thresh]['iou'].append(iou)
+
+            # GT: axis=1, pred: axis=0
+            self.thresh_to_metrics[thresh]['GT=fg,pred=fg'].append(conf_matrix[1][1])
+            self.thresh_to_metrics[thresh]['GT=bg,pred=bg'].append(conf_matrix[0][0])
+            self.thresh_to_metrics[thresh]['GT=fg,pred=bg'].append(conf_matrix[0][1])
+            self.thresh_to_metrics[thresh]['GT=bg,pred=fg'].append(conf_matrix[1][0])
+            self.thresh_to_metrics[thresh]['total'].append(conf_matrix.sum())
+        return self.thresh_to_metrics
+
+    def summary(self):
+        """
+        Searches for peak iou among all the thresholds
+        :return:
+        """
+        peak_vals = {'iou': -1}
+
+        for thresh in self.thresh_to_metrics:
+            m_iou = np.mean(self.thresh_to_metrics[thresh]['iou'])
+            if m_iou > peak_vals['iou']:
+                for k in self.thresh_to_metrics[thresh]:
+                    # Normalize the confusion metrics
+                    if 'GT=' in k:
+                        peak_vals[k] = np.sum(self.thresh_to_metrics[thresh][k]) / np.sum(
+                            self.thresh_to_metrics[thresh]['total'])
+                peak_vals['iou'] = np.mean(self.thresh_to_metrics[thresh]['iou'])
+                peak_vals['threshold'] = thresh
+        return peak_vals
 
 
 def show_images(original, gt_mask, exit_to_single_class_cams, save_dir):

@@ -99,3 +99,6 @@ def to_numpy_img(tensor):
 
     return (tensor.detach().cpu()).numpy()
 
+
+def get_dir(file_path):
+    return '/'.join(file_path.split('/')[:-1])
