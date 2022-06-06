@@ -227,8 +227,8 @@ class MultiExitModule(nn.Module):
             exit_kernel_sizes=[3, 3, 3, 3],
             exit_strides=[None] * 4,
             inference_earliest_exit_ix=1,
-            # downsample_factors_for_scores=[1 / 8, 1 / 4, 1 / 2, 1]
-            downsample_factors_for_scores=[1] * 4
+            downsample_factors_for_scores=[1 / 8, 1 / 4, 1 / 2, 1]
+            # downsample_factors_for_scores=[1] * 4
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -340,8 +340,6 @@ class MultiExitModule(nn.Module):
         return names
 
 
-
-
 class MultiExitStats:
     def __init__(self):
         self.exit_ix_to_stats = {}
@@ -371,7 +369,7 @@ class MultiExitStats:
 
 
 class SimilarityExitModule(ExitModule):
-    def __init__(self, top_k=1, top_k_type='max', similarity_fn=cosine_similarity, layer='exit_in',
+    def __init__(self, similarity_fn=cosine_similarity, top_k=1, top_k_type='max', layer='exit_in',
                  **kwargs):
         super(SimilarityExitModule, self).__init__(**kwargs)
         self.top_k = top_k
@@ -433,9 +431,23 @@ class SimilarityExitModule(ExitModule):
         hid, top_k_ixs, out = self.forward_and_get_top_k_cells(x, y)
 
         # Compute similarity between all the feature map cells and the top activated cells
-        out['ref_mask_scores'] = self.calc_similarity(hid, top_k_ixs)
+        out['ref_mask_scores'] = self.calc_similarity(hid, top_k_ixs).reshape(len(x),
+                                                                              out['ref_hid'].shape[2],
+                                                                              out['ref_hid'].shape[3])
 
         return out
+
+
+class CosineSimilarityExitModule(SimilarityExitModule):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.similarity_fn = cosine_similarity
+
+
+class ThresholdedCosineSimilarityExitModule(SimilarityExitModule):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.similarity_fn = thresholded_cosine_similarity
 
 
 # class SimilarityBasedMultiExitModule(MultiExitModule):

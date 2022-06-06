@@ -25,8 +25,13 @@ class OccamTrainerv2(OccamTrainer):
 
         logits = model_out[f'E={exit_ix}, logits']
 
-        # Compute CAM segmentation loss
-        seg_cfg = self.trainer_cfg.cam_segmentation
+        # Compute Ref MSE loss
+        ref_mse_cfg = self.trainer_cfg.ref_mse_loss
+        if ref_mse_cfg.loss_wt != 0.0:
+            mse_loss = RefMSELoss()(model_out[f'E={exit_ix}, ref_mask_scores'],
+                                    model_out[f'E={exit_ix}, cam'],
+                                    batch['y'])
+            loss_dict['mse_loss'] = ref_mse_cfg.loss_wt * mse_loss
 
         # Compute exit gate loss
         gate_cfg = self.trainer_cfg.exit_gating
@@ -81,7 +86,7 @@ class OccamTrainerv2(OccamTrainer):
                 ref_feat_key = f'{exit_name}, ref_hid'
                 ref_h, ref_w = model_out[ref_feat_key].shape[2], model_out[ref_feat_key].shape[3]
                 ref_mask_key = f'{exit_name}, ref_mask_scores'
-                ref_feat_masks = model_out[ref_mask_key].reshape(len(batch['x']), ref_h, ref_w)
+                ref_feat_masks = model_out[ref_mask_key]
             else:
                 ref_feat_masks = get_early_exit_features(model_out['early_exit_names'], exit_name_to_mask_scores,
                                                          ref_h, ref_w).reshape(len(batch['x']), ref_h, ref_w)
@@ -125,12 +130,30 @@ class GateWeightedCELoss():
         return (loss_wt + self.offset) * F.cross_entropy(curr_logits, gt_ys, reduction='none')
 
 
-class CAMSegmentationLoss():
-    def __init__(self):
-        pass
+def normalize(tensor, eps=1e-5):
+    """
 
-    def __call__(self, cams, reference_mask, y):
-        pass
+    :param tensor:
+    :param eps:
+    :return:
+    """
+    assert len(tensor.shape) == 3
+    maxes, mins = torch.max(tensor.reshape(len(tensor), -1), dim=1)[0].detach(), \
+                  torch.min(tensor.reshape(len(tensor), -1), dim=1)[0].detach()
+    normalized = (tensor - mins.unsqueeze(1).unsqueeze(2)) / (
+                maxes.unsqueeze(1).unsqueeze(2) - mins.unsqueeze(1).unsqueeze(2) + eps)
+    return normalized
+
+
+class RefMSELoss():
+    def __call__(self, ref_maps, cams, y, eps=1e-5):
+        cams_y = get_class_cams_for_occam_nets(cams, y)
+        cams_y = interpolate(cams_y, ref_maps.shape[1], ref_maps.shape[2]).squeeze()
+        cams_y = normalize(cams_y)
+
+        ref_maps = normalize(ref_maps.detach())
+        loss = F.mse_loss(ref_maps, cams_y, reduction='none').mean(dim=2).mean(dim=1)
+        return loss
 
 
 class ExitGateLoss():

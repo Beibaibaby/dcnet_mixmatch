@@ -89,24 +89,12 @@ def occam_resnet18(num_classes, width=58, multi_exit_type=MultiExitModule, exits
                        exits_kwargs=exits_kwargs)
 
 
-def occam_resnet18_v2(num_classes):
-    return occam_resnet18(num_classes, exits_kwargs={'exit_type': SimilarityExitModule})
+def occam_resnet18_cosine_sim(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={'exit_type': CosineSimilarityExitModule})
 
 
-def occam_resnet18_no_downsample(num_classes):
-    return occam_resnet18(num_classes, exits_kwargs={'exit_type': SimilarityExitModule,
-                                                     'downsample_factors_for_scores': [1] * 4})
-
-
-def occam_resnet18_downsample_same(num_classes):
-    return occam_resnet18(num_classes, exits_kwargs={'exit_type': SimilarityExitModule,
-                                                     'downsample_factors_for_scores': [1 / 8, 1 / 4, 1 / 2, 1]})
-
-
-def occam_resnet18_sim(num_classes):
-    return occam_resnet18(num_classes,
-                          multi_exit_type=SimilarityBasedMultiExitModule,
-                          exits_kwargs={'exit_type': SimilarityExitModule})
+def occam_resnet18_thresholded_cosine_sim(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={'exit_type': ThresholdedCosineSimilarityExitModule})
 
 
 # Change stride/kernel size

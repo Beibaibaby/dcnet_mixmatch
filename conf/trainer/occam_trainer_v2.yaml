@@ -5,3 +5,5 @@ cam_segmentation:
   loss_wt: 0.1
 cam_suppression:
   loss_wt: 0
+ref_mse_loss:
+  loss_wt: 1
