@@ -227,7 +227,7 @@ class MultiExitModule(nn.Module):
             exit_kernel_sizes=[3, 3, 3, 3],
             exit_strides=[None] * 4,
             inference_earliest_exit_ix=1,
-            downsample_factors_for_scores=[1 / 8, 1 / 4, 1 / 2, 1]
+            downsample_factors_for_scores=[1 / 4, 1 / 2, 1, 2]
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -368,7 +368,7 @@ class MultiExitStats:
 
 
 class SimilarityExitModule(ExitModule):
-    def __init__(self, top_k=5, top_k_type='max', similarity_fn=cosine_similarity, layer='exit_in', **kwargs):
+    def __init__(self, top_k=1, top_k_type='max', similarity_fn=cosine_similarity, layer='exit_in', **kwargs):
         super(SimilarityExitModule, self).__init__(**kwargs)
         self.top_k = top_k
         self.top_k_type = top_k_type
@@ -429,3 +429,45 @@ def visualize_reference_masks(img, sim_scores, top_k_cells, mask_h, mask_w, save
 
     score_hm = compute_heatmap(img, sim_scores.reshape(mask_h, mask_w))
     imwrite(os.path.join(save_path + "_similarity.jpg"), score_hm)
+
+# class SRGExitModule(ExitModule):
+#     def __init__(self, top_k=1, top_k_type='max', similarity_fn=cosine_similarity, layer='exit_in', **kwargs):
+#         super(SRGExitModule, self).__init__(**kwargs)
+#         self.top_k = top_k
+#         self.top_k_type = top_k_type
+#         self.similarity_fn = similarity_fn
+#         self.layer = layer
+#         self.set_downsample_factor(1)
+#
+#     def set_downsample_factor(self, downsample_factor):
+#         """
+#         Feature maps are downsampled by this factor before computing similarity scores
+#         :param downsample_factor:
+#         :return:
+#         """
+#         self.downsample_factor = downsample_factor
+#
+#     def forward(self, x, model_out={}, y=None):
+#         model_out = super().forward(x, model_out)
+#
+#         # Step 1: Get CAMs of either the GT or the highest scoring classes
+#         cams = model_out['cam']  # B x C x H x W
+#         hid = model_out[self.layer]
+#         classes = y if self.top_k_type == 'gt' else model_out['logits'].argmax(dim=-1)
+#         class_cams = get_class_cams_for_occam_nets(cams, classes)  # B x HW
+#         _, _, hid_h, hid_w = hid.shape
+#         tar_h, tar_w = int(hid_h * self.downsample_factor), int(hid_w * self.downsample_factor)
+#         hid = interpolate(hid, tar_h, tar_w)
+#         class_cams = interpolate(class_cams.unsqueeze(1), tar_h, tar_w).reshape(len(x), -1)
+#
+#         # Step 2: Get the highest scoring cells as reference cells
+#         top_k_ixs = torch.argsort(class_cams, dim=1, descending=True)[:, :self.top_k]  # B x top_k
+#         seeds = pos1d_to_pos2d(top_k_ixs, tar_h, tar_w)
+#
+#
+#         # Step 3: Generate a map to train localization of CAM
+#         similarity = seed_region_growing(hid, seeds)  # total_cells x top_k
+#         # model_out['ref_mask_top_k_cells'] = top_k_ixs
+#         model_out['ref_hid'] = hid
+#         model_out['ref_mask_scores'] = similarity
+#         return model_out

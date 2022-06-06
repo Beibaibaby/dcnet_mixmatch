@@ -92,6 +92,11 @@ def occam_resnet18_v2(num_classes):
         'exit_type': SimilarityExitModule})
 
 
+def occam_resnet18_srg(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={
+        'exit_type': SRGExitModule})
+
+
 # Change stride/kernel size
 def occam_resnet18_k3s2(num_classes):
     return occam_resnet18(num_classes,

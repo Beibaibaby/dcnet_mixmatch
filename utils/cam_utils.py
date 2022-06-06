@@ -69,7 +69,7 @@ def torch_crop_and_resize(cams, bboxes, size):
 def interpolate(x, h, w):
     if len(x.shape) == 2:
         x = x.unsqueeze(0).unsqueeze(1)
-    if len(x.shape) == 3: # Assumes single-channel images
+    if len(x.shape) == 3:  # Assumes single-channel images
         x = x.unsqueeze(1)
     if x.shape[2] == h and x.shape[3] == w:
         return x
@@ -149,6 +149,18 @@ def get_gt_class_cams(model, batch, device=None, target_exit_size=1):
                }, model_out
 
 
+def pos1d_to_pos2d(loc1ds, h, w):
+    row_cols = []
+    for curr_loc1ds in loc1ds:
+        rc = []
+        for loc1d in curr_loc1ds:
+            row = loc1d // w
+            col = loc1d % h
+            rc.append((row, col))
+        row_cols.append(rc)
+    return row_cols
+
+
 def get_target_layers(model):
     """
     Get convolutional layer for GradCAM
@@ -194,6 +206,7 @@ def cosine_similarity(tensor1, tensor2):
     assert tensor1.shape[1] == tensor2.shape[1]
     cosine = F.normalize(tensor1, dim=1).permute(0, 2, 1) @ F.normalize(tensor2, dim=1)
     return cosine.sum(dim=2)
+
 
 
 def get_class_cams_for_occam_nets(cams, classes):
@@ -269,3 +282,80 @@ def imwrite(save_file, img):
     written = cv2.imwrite(save_file, (img * 255).astype(np.uint8))
     if not written:
         raise Exception(f'Could not write to {save_file}')
+
+
+# def seed_region_growing(feat_maps, seeds):
+#     class Point(object):
+#         def __init__(self, x, y):
+#             self.x = x
+#             self.y = y
+#
+#         def getX(self):
+#             return self.x
+#
+#         def getY(self):
+#             return self.y
+#
+#     def cosine_dist(feat_map, currentPoint, tmpPoint):
+#         """
+#
+#         :param feat_map: D x H x W
+#         :param currentPoint:
+#         :param tmpPoint:
+#         :return:
+#         """
+#         norm1 = F.normalize(feat_map[:, currentPoint.x, currentPoint.y].unsqueeze(0), dim=1).squeeze()
+#         norm2 = F.normalize(feat_map[:, tmpPoint.x, tmpPoint.y].unsqueeze(0), dim=1).squeeze()
+#         return 1 - (norm1 * norm2).sum()
+#
+#     def selectConnects(p):
+#         if p != 0:
+#             connects = [Point(-1, -1), Point(0, -1), Point(1, -1), Point(1, 0), Point(1, 1), \
+#                         Point(0, 1), Point(-1, 1), Point(-1, 0)]
+#         else:
+#             connects = [Point(0, -1), Point(1, 0), Point(0, 1), Point(-1, 0)]
+#         return connects
+#
+#     def region_grow(feat_map, seeds, thresh, p=1):
+#         D, H, W = feat_map.shape
+#         seedMark = np.zeros((H, W))
+#         seedList = []
+#         for seed in seeds:
+#             seedList.append(seed)
+#         label = 1
+#         connects = selectConnects(p)
+#         while (len(seedList) > 0):
+#             currentPoint = seedList.pop(0)
+#
+#             seedMark[currentPoint.x, currentPoint.y] = label
+#             for i in range(8):
+#                 tmpX = currentPoint.x + connects[i].x
+#                 tmpY = currentPoint.y + connects[i].y
+#                 if tmpX < 0 or tmpY < 0 or tmpX >= H or tmpY >= W:
+#                     continue
+#                 grayDiff = cosine_dist(feat_map, currentPoint, Point(tmpX, tmpY))
+#                 if grayDiff < thresh and seedMark[tmpX, tmpY] == 0:
+#                     seedMark[tmpX, tmpY] = label
+#                     seedList.append(Point(tmpX, tmpY))
+#         return seedMark
+#
+#     """
+#
+#     :param feat_maps: B x D x H x W
+#     :param seeds: Locations of seeds assuming a flattened feature_map (HW), shape: B x k
+#     :return:
+#     """
+#     regions = []
+#     for feat_map, _seeds in zip(feat_maps, seeds):
+#         # region = region_grow(feat_map, [Point(int(seed[0]), int(seed[1])) for seed in _seeds], 0.5, p=1).tolist()
+#         # feat_map[int(seed[0]), int(seed[1])]
+#         # D, H, W = feat_map.shape
+#         # region = np.zeros((H, W))
+#         # for _seed in _seeds:
+#         #     region[int(_seed[0]), int(_seed[1])] = 1.
+#         # region[int(_seeds[0][0]), int(_seeds[0][1])] = 1.
+#
+#         region = region_grow(feat_map, [Point(int(seed[0]), int(seed[1])) for seed in _seeds], 0.5, p=1).tolist()
+#         regions.append(region)
+#     regions = torch.FloatTensor(np.asarray(regions))
+#     return regions
