@@ -141,7 +141,7 @@ def normalize(tensor, eps=1e-5):
     maxes, mins = torch.max(tensor.reshape(len(tensor), -1), dim=1)[0].detach(), \
                   torch.min(tensor.reshape(len(tensor), -1), dim=1)[0].detach()
     normalized = (tensor - mins.unsqueeze(1).unsqueeze(2)) / (
-                maxes.unsqueeze(1).unsqueeze(2) - mins.unsqueeze(1).unsqueeze(2) + eps)
+            maxes.unsqueeze(1).unsqueeze(2) - mins.unsqueeze(1).unsqueeze(2) + eps)
     return normalized
 
 
@@ -152,6 +152,7 @@ class RefMSELoss():
         cams_y = normalize(cams_y)
 
         ref_maps = normalize(ref_maps.detach())
+
         loss = F.mse_loss(ref_maps, cams_y, reduction='none').mean(dim=2).mean(dim=1)
         return loss
 

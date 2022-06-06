@@ -6,7 +6,8 @@ dataset=image_net
 optim=image_net
 subset_percent=8
 
-for ref_mse_wt in 1 0.1 0.01 0.001; do
+for ref_mse_wt in 0.1 1e-2 1e-3 1e-4; do
+#for ref_mse_wt in 1; do
   CUDA_VISIBLE_DEVICES=${GPU} python main.py \
   model.name=occam_resnet18_cosine_sim \
   trainer=occam_trainer_v2_image_net \
