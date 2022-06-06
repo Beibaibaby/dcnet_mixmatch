@@ -13,6 +13,7 @@ class OccamResNet(VariableWidthResNet):
             initial_padding=3,
             use_initial_max_pooling=True,
             # Exits
+            multi_exit_type=MultiExitModule,
             exits_kwargs=None
     ) -> None:
         """
@@ -31,7 +32,7 @@ class OccamResNet(VariableWidthResNet):
         self.exits_cfg = exits_kwargs
         del self.fc
 
-        multi_exit = MultiExitModule(**exits_kwargs)
+        multi_exit = multi_exit_type(**exits_kwargs)
         for i in range(0, 4):
             multi_exit.build_and_add_exit(getattr(self, f'layer{i + 1}')[-1].out_dims)
         self.multi_exit = multi_exit
@@ -78,23 +79,34 @@ def occam_resnet18_img64(num_classes):
                        })
 
 
-def occam_resnet18(num_classes, width=58, exits_kwargs={}):
+def occam_resnet18(num_classes, width=58, multi_exit_type=MultiExitModule, exits_kwargs={}):
     if 'exit_out_dims' not in exits_kwargs:
         exits_kwargs['exit_out_dims'] = num_classes
     return OccamResNet(block=BasicBlock,
                        layers=[2, 2, 2, 2],
                        width=width,
+                       multi_exit_type=multi_exit_type,
                        exits_kwargs=exits_kwargs)
 
 
 def occam_resnet18_v2(num_classes):
-    return occam_resnet18(num_classes, exits_kwargs={
-        'exit_type': SimilarityExitModule})
+    return occam_resnet18(num_classes, exits_kwargs={'exit_type': SimilarityExitModule})
 
 
-def occam_resnet18_srg(num_classes):
-    return occam_resnet18(num_classes, exits_kwargs={
-        'exit_type': SRGExitModule})
+def occam_resnet18_no_downsample(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={'exit_type': SimilarityExitModule,
+                                                     'downsample_factors_for_scores': [1] * 4})
+
+
+def occam_resnet18_downsample_same(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={'exit_type': SimilarityExitModule,
+                                                     'downsample_factors_for_scores': [1 / 8, 1 / 4, 1 / 2, 1]})
+
+
+def occam_resnet18_sim(num_classes):
+    return occam_resnet18(num_classes,
+                          multi_exit_type=SimilarityBasedMultiExitModule,
+                          exits_kwargs={'exit_type': SimilarityExitModule})
 
 
 # Change stride/kernel size

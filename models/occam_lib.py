@@ -177,13 +177,13 @@ class ExitModule(nn.Module):
                                        norm_type=self.gate_norm_type,
                                        non_linearity_type=self.gate_non_linearity_type)
 
-    def forward(self, x, out={}, y=None):
+    def forward(self, x, y=None):
         """
         Returns CAM, logits and gate
         :param x:
-        :param out:
         :return: Returns CAM, logits and gate
         """
+        out = {}
         out[ExitDataTypes.EXIT_IN] = x
         if self.scale_factor != 1:
             x = F.interpolate(x, scale_factor=self.scale_factor, align_corners=False, mode='bilinear')
@@ -227,7 +227,8 @@ class MultiExitModule(nn.Module):
             exit_kernel_sizes=[3, 3, 3, 3],
             exit_strides=[None] * 4,
             inference_earliest_exit_ix=1,
-            downsample_factors_for_scores=[1 / 4, 1 / 2, 1, 2]
+            # downsample_factors_for_scores=[1 / 8, 1 / 4, 1 / 2, 1]
+            downsample_factors_for_scores=[1] * 4
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -339,6 +340,8 @@ class MultiExitModule(nn.Module):
         return names
 
 
+
+
 class MultiExitStats:
     def __init__(self):
         self.exit_ix_to_stats = {}
@@ -368,7 +371,8 @@ class MultiExitStats:
 
 
 class SimilarityExitModule(ExitModule):
-    def __init__(self, top_k=1, top_k_type='max', similarity_fn=cosine_similarity, layer='exit_in', **kwargs):
+    def __init__(self, top_k=1, top_k_type='max', similarity_fn=cosine_similarity, layer='exit_in',
+                 **kwargs):
         super(SimilarityExitModule, self).__init__(**kwargs)
         self.top_k = top_k
         self.top_k_type = top_k_type
@@ -384,31 +388,103 @@ class SimilarityExitModule(ExitModule):
         """
         self.downsample_factor = downsample_factor
 
-    def forward(self, x, model_out={}, y=None):
-        model_out = super().forward(x, model_out)
+    def forward_and_get_top_k_cells(self, x, y=None):
+        """
+        Gets top scoring cells from CAM (1D location in a flattened vector)
+        :param x:
+        :param y:
+        :return:
+        """
+        out = super().forward(x)
 
         # Step 1: Get CAMs of either the GT or the highest scoring classes
-        cams = model_out['cam']  # B x C x H x W
-        hid = model_out[self.layer]
-        classes = y if self.top_k_type == 'gt' else model_out['logits'].argmax(dim=-1)
-        class_cams = get_class_cams_for_occam_nets(cams, classes)  # B x HW
+        cams = out['cam']  # B x C x H x W
+        hid = out[self.layer]
         _, _, hid_h, hid_w = hid.shape
         tar_h, tar_w = int(hid_h * self.downsample_factor), int(hid_w * self.downsample_factor)
         hid = interpolate(hid, tar_h, tar_w)
-        class_cams = interpolate(class_cams.unsqueeze(1), tar_h, tar_w).reshape(len(x), -1)
-        # class_cams = interpolate(class_cams.unsqueeze(1), hid.shape[2], hid.shape[3]).reshape(len(x), -1)  # B x HW
+
+        classes = y if self.top_k_type == 'gt' else out['logits'].argmax(dim=-1)
+        class_cams = get_class_cams_for_occam_nets(cams, classes)  # B x HW
+        class_cams = interpolate(class_cams.unsqueeze(1), tar_h, tar_w).reshape(len(out['logits']), -1)
 
         # Step 2: Get the highest scoring cells as reference cells
         top_k_ixs = torch.argsort(class_cams, dim=1, descending=True)[:, :self.top_k]  # B x top_k
-        flat_hid = hid.reshape(hid.shape[0], hid.shape[1], -1)  # B x dims x hw
 
-        # Step 3: Generate a map to train localization of CAM
+        out['ref_top_k_ixs'] = top_k_ixs
+        out['ref_hid'] = hid
+
+        return hid, top_k_ixs, out
+
+    def calc_similarity(self, hid, top_k_ixs):
+        """
+        Computes similarity between all the hidden cells and the top_k cells
+        :param hid: Hidden features
+        :param top_k_ixs: locations for top_k cells (assuming a flattened vector)
+        :return:
+        """
+        flat_hid = hid.reshape(hid.shape[0], hid.shape[1], -1)  # B x dims x hw
         flat_hid_top_k = torch.gather(flat_hid, dim=2, index=top_k_ixs.unsqueeze(1).repeat(1, flat_hid.shape[1], 1))
         similarity = self.similarity_fn(flat_hid, flat_hid_top_k)  # total_cells x top_k
-        model_out['ref_mask_top_k_cells'] = top_k_ixs
-        model_out['ref_hid'] = hid
-        model_out['ref_mask_scores'] = similarity
-        return model_out
+        return similarity
+
+    def forward(self, x, y=None):
+        # Forward through the exit and obtain top_k cell locations with the highest CAM scores
+        hid, top_k_ixs, out = self.forward_and_get_top_k_cells(x, y)
+
+        # Compute similarity between all the feature map cells and the top activated cells
+        out['ref_mask_scores'] = self.calc_similarity(hid, top_k_ixs)
+
+        return out
+
+
+# class SimilarityBasedMultiExitModule(MultiExitModule):
+#     def forward(self, block_num_to_exit_in, y=None):
+#         biased_exit_ixs = [0]
+#         exit_outs = {}
+#         hid_h, hid_w = None, None
+#         all_top_k_ixs = None
+#
+#         # Step 1: Get top_k_ixs from each of the exits (barring E.0)
+#         exit_ix = 0
+#         for block_num in block_num_to_exit_in:
+#             if block_num in self.exit_block_nums:
+#                 exit_in = block_num_to_exit_in[block_num]
+#                 if exit_ix in self.detached_exit_ixs:
+#                     exit_in = exit_in.detach()
+#                 hid, top_k_ixs, out = self.exits[exit_ix].forward_and_get_top_k_cells(exit_in, y=y)
+#                 for k in out:
+#                     exit_outs[f'E={exit_ix}, {k}'] = out[k]
+#
+#                 # Aggregate a common top_k_ixs
+#                 if exit_ix not in biased_exit_ixs:
+#                     if all_top_k_ixs is None:
+#                         all_top_k_ixs = top_k_ixs.clone()
+#                     else:
+#                         all_top_k_ixs = torch.cat([all_top_k_ixs, top_k_ixs], dim=1)
+#
+#                 # Verify that all the exits have same spatial dims (albeit resized)
+#                 if hid_h is not None:
+#                     assert hid.shape[2] == hid_h
+#                     assert hid.shape[3] == hid_w
+#                 hid_h, hid_w = hid.shape[2], hid.shape[3]
+#                 exit_ix += 1
+#
+#         # Step 2: Measure similarity using the same top_k_ixs in all the exits
+#         exit_ix = 0
+#         for block_num in block_num_to_exit_in:
+#             if block_num in self.exit_block_nums:
+#                 if exit_ix in biased_exit_ixs:
+#                     curr_top_k_ixs = exit_outs[f"E={exit_ix}, ref_top_k_ixs"][exit_ix]
+#                 else:
+#                     curr_top_k_ixs = all_top_k_ixs
+#                 similarity = self.exits[exit_ix].calc_similarity(exit_outs[f"E={exit_ix}, ref_hid"], curr_top_k_ixs)
+#                 exit_outs[f'E={exit_ix}, ref_mask_scores'] = similarity
+#                 exit_ix += 1
+#
+#         # Get names of triggered exits
+#         self.get_early_exits(exit_outs)
+#         return exit_outs
 
 
 def visualize_reference_masks(img, sim_scores, top_k_cells, mask_h, mask_w, save_path):

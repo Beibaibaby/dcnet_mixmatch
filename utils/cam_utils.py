@@ -196,17 +196,31 @@ def compute_heatmap(img, cam, norm_type=min_max_norm):
     return hm / np.max(hm)
 
 
-def cosine_similarity(tensor1, tensor2):
+def cosine_similarity(tensor1, tensor2, gamma=2):
     """
     Measures similarity between each cell in tensor1 with every other cell of the same sample in tensor2
     :param tensor1: B x D x HW
     :param tensor2: B x D x k
-    :return: Cosine similarity between each HW with each k
+    :return: Aggregate cosine similarity score between each cells in HW with all the k elements
     """
     assert tensor1.shape[1] == tensor2.shape[1]
     cosine = F.normalize(tensor1, dim=1).permute(0, 2, 1) @ F.normalize(tensor2, dim=1)
-    return cosine.sum(dim=2)
+    return cosine.sum(dim=2) ** gamma
 
+
+def thresholded_cosine_similarity(tensor1, tensor2, threshold='mean'):
+    """
+
+    :param tensor1: B x D x HW
+    :param tensor2: B x D x k
+    :return:
+    """
+    cosine_sim = cosine_similarity(tensor1, tensor2)
+    if threshold == 'mean':
+        means = torch.mean(cosine_sim, dim=1)
+        threshold = means.unsqueeze(1).repeat(1, cosine_sim.shape[1])
+    thresholded_sim = torch.where(cosine_sim >= threshold, cosine_sim, torch.zeros_like(cosine_sim))
+    return thresholded_sim
 
 
 def get_class_cams_for_occam_nets(cams, classes):
@@ -282,7 +296,6 @@ def imwrite(save_file, img):
     written = cv2.imwrite(save_file, (img * 255).astype(np.uint8))
     if not written:
         raise Exception(f'Could not write to {save_file}')
-
 
 # def seed_region_growing(feat_maps, seeds):
 #     class Point(object):
