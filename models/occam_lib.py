@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils.metrics import Accuracy, GateMetric
+from utils.metrics import Accuracy, ExitPercent
 from utils.cam_utils import *
 import os
 from utils.data_utils import get_dir
@@ -349,15 +349,16 @@ class MultiExitStats:
             if exit_ix not in self.exit_ix_to_stats:
                 self.exit_ix_to_stats[exit_ix] = {
                     'accuracy': Accuracy(),
-                    'gate': GateMetric()
+                    'early_exit%': ExitPercent()
                 }
             logits_key = f'E={exit_ix}, logits'
             logits = exit_outs[logits_key]
+            # Accuracy on all the samples
             self.exit_ix_to_stats[exit_ix]['accuracy'].update(logits, gt_ys, class_names, group_names)
 
-            gate_key = f"E={exit_ix}, gates"
-            gate_vals = exit_outs[gate_key]
-            self.exit_ix_to_stats[exit_ix]['gate'].update(gate_vals)
+            for ee_name in exit_outs['early_exit_names']:
+                ee_ix = int(ee_name.split('E=')[1])
+                self.exit_ix_to_stats[exit_ix]['early_exit%'].update(int(ee_ix) == int(exit_ix))
 
     def summary(self, prefix=''):
         exit_to_summary = {}

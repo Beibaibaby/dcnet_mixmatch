@@ -1,7 +1,7 @@
 #!/bin/bash
 source activate occamnets
 
-GPU=2
+GPU=0
 dataset=coco_on_places
 optim=coco_on_places
 
@@ -13,4 +13,8 @@ trainer=occam_trainer \
 trainer.precision=${precision} \
 dataset=${dataset} \
 optimizer=${optim} \
-expt_suffix=mp_${precision}_bce
+expt_suffix=mp_${precision}_mse
+
+# trainer.check_val_every_n_epoch=2
+
+#expt_suffix=mp_${precision}_bce_with_logits

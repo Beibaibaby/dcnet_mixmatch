@@ -102,18 +102,15 @@ class Accuracy():
         # return obj
 
 
-class GateMetric():
-    def __init__(self, threshold=0.5):
+class ExitPercent():
+    def __init__(self):
         self.total = 0
         self.exited = 0
-        self.threshold = threshold
 
-    def update(self, exit_probas):
-        # exit_probas = torch.sigmoid(exit_logits)
-        for proba in exit_probas:
-            if proba >= self.threshold:
-                self.exited += 1
-            self.total += 1
+    def update(self, exited):
+        if exited:
+            self.exited += 1
+        self.total += 1
 
     def get_exit_pct(self, factor=100):
         return self.exited / self.total * factor

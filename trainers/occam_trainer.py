@@ -46,31 +46,39 @@ class OccamTrainer(BaseTrainer):
 
         logits = model_out[f'E={exit_ix}, logits']
 
+        ###############################################################################################################
         # Compute CAM suppression loss
+        ###############################################################################################################
         supp_cfg = self.trainer_cfg.cam_suppression
         if supp_cfg.loss_wt != 0.0:
             loss_dict['supp'] = supp_cfg.loss_wt * CAMSuppressionLoss()(model_out[f'E={exit_ix}, cam'], gt_ys)
 
+        ###############################################################################################################
         # Compute exit gate loss
+        ###############################################################################################################
         gate_cfg = self.trainer_cfg.exit_gating
         if gate_cfg.loss_wt != 0.0:
+            loss_name = f'ExitGateLoss_{exit_ix}'
             if batch_idx == 0:
-                # The loss is stateful (computes accuracy, which is reset per epoch)
-                setattr(self, f'exit_gate_loss_{exit_ix}', ExitGateLoss(gate_cfg.train_acc_thresholds[exit_ix],
-                                                                        gate_cfg.balance_factor))
+                # The loss is stateful (maintains accuracy/gate_wt)
+                if not hasattr(self, loss_name):
+                    setattr(self, loss_name, ExitGateLoss(gate_cfg.train_acc_thresholds[exit_ix],
+                                                          gate_cfg.balance_factor))
+                getattr(self, loss_name).on_epoch_start()
 
             gates = model_out[f'E={exit_ix}, gates']
             force_use = (self.current_epoch + 1) <= gate_cfg.min_epochs
-            loss_dict['gate'] = gate_cfg.loss_wt * getattr(self, f'exit_gate_loss_{exit_ix}') \
-                (logits, gt_ys, gates, force_use=force_use)
+            loss_dict['gate'] = gate_cfg.loss_wt * getattr(self, loss_name) \
+                (batch['item_ix'], logits, gt_ys, gates, force_use=force_use)
 
+        ###############################################################################################################
         # Compute gate-weighted CE Loss
+        ###############################################################################################################
+        loss_name = f"GateWeightedCELoss_{exit_ix}"
         if batch_idx == 0:
-            # The loss is stateful (maintains max loss wt, which we reset every epoch.)
-            setattr(self, f"GateWeightedCELoss_{exit_ix}", GateWeightedCELoss(gate_cfg.gamma0, gate_cfg.gamma,
-                                                                              offset=gate_cfg.weight_offset))
+            setattr(self, loss_name, GateWeightedCELoss(gate_cfg.gamma0, gate_cfg.gamma, offset=gate_cfg.weight_offset))
         prev_gates = None if exit_ix == 0 else model_out[f"E={exit_ix - 1}, gates"]
-        loss_dict['ce'] = getattr(self, f"GateWeightedCELoss_{exit_ix}")(exit_ix, logits, prev_gates, gt_ys)
+        loss_dict['ce'] = getattr(self, loss_name)(exit_ix, logits, prev_gates, gt_ys)
         return loss_dict
 
     def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None):
@@ -136,6 +144,14 @@ class OccamTrainer(BaseTrainer):
                 for sk in seg_metric_vals:
                     self.log(f"{split} {loader_key} {exit_name} {sk}", seg_metric_vals[sk])
 
+    def on_save_checkpoint(self, checkpoint):
+        for exit_ix in range(len(self.model.multi_exit.exit_block_nums)):
+            getattr(self, f'ExitGateLoss_{exit_ix}').on_save_checkpoint(checkpoint, exit_ix)
+
+    def on_load_checkpoint(self, checkpoint):
+        for exit_ix in range(len(self.model.multi_exit.exit_block_nums)):
+            getattr(self, f'ExitGateLoss_{exit_ix}').on_load_checkpoint(checkpoint, exit_ix)
+
 
 class GateWeightedCELoss():
     def __init__(self, gamma0=3, gamma=1, eps=1e-5, offset=0.1):
@@ -196,8 +212,9 @@ class ExitGateLoss():
         self.acc_threshold = acc_threshold
         self.accuracy = Accuracy()
         self.balance_factor = balance_factor
+        self.item_to_correctness = {}
 
-    def __call__(self, logits, gt_ys, gates, force_use=False, eps=1e-5):
+    def __call__(self, item_ixs, logits, gt_ys, gates, force_use=False, eps=1e-5):
         """
 
         :param logits:
@@ -213,16 +230,29 @@ class ExitGateLoss():
 
         if mpg <= self.acc_threshold or force_use:
             gate_gt = (pred_ys == gt_ys.squeeze()).long().type(gates.type())
-            _exit_cnt, _continue_cnt = gate_gt.sum().detach(), (1 - gate_gt).sum().detach()
+            for item_ix, is_correct in zip(item_ixs, gate_gt):
+                self.item_to_correctness[int(item_ix)] = float(is_correct)
+        else:
+            gate_gt = torch.FloatTensor(
+                [self.item_to_correctness[int(item_ix)] for item_ix in item_ixs]).type(gates.type())
+        _exit_cnt, _continue_cnt = gate_gt.sum().detach(), (1 - gate_gt).sum().detach()
+        # Assign balanced weights to exit vs continue preds
+        _max_cnt = max(_exit_cnt, _continue_cnt)
+        _exit_cnt, _continue_cnt = _exit_cnt / _max_cnt, _continue_cnt / _max_cnt
+        _gate_loss_wts = torch.where(gate_gt > 0,
+                                     (torch.ones_like(gate_gt) / (_exit_cnt + eps)) ** self.balance_factor,
+                                     (torch.ones_like(gate_gt) / (_continue_cnt + eps)) ** self.balance_factor)
 
-            # Assign balanced weights to exit vs continue preds
-            _max_cnt = max(_exit_cnt, _continue_cnt)
-            _exit_cnt, _continue_cnt = _exit_cnt / _max_cnt, _continue_cnt / _max_cnt
-            _gate_loss_wts = torch.where(gate_gt > 0,
-                                         (torch.ones_like(gate_gt) / (_exit_cnt + eps)) ** self.balance_factor,
-                                         (torch.ones_like(gate_gt) / (_continue_cnt + eps)) ** self.balance_factor)
-            # gate_loss = _gate_loss_wts * F.binary_cross_entropy_with_logits(inv_sigmoid(gates), gate_gt.float(), reduction='none')
-            # gate_loss = _gate_loss_wts * F.binary_cross_entropy(gates, gate_gt.float(), reduction='none')
-            gate_loss = _gate_loss_wts * F.mse_loss(gates, gate_gt, reduction='none')
-            return gate_loss.mean()
-        return torch.zeros(len(logits)).to(logits.device)
+        gate_loss = _gate_loss_wts * F.binary_cross_entropy(gates, gate_gt, reduction='none')
+        # gate_loss = _gate_loss_wts * F.binary_cross_entropy_with_logits(inv_sigmoid(gates), gate_gt, reduction='none')
+        # gate_loss = _gate_loss_wts * F.mse_loss(gates, gate_gt, reduction='none')
+        return gate_loss.mean()
+
+    def on_epoch_start(self):
+        self.accuracy = Accuracy()
+
+    def on_save_checkpoint(self, checkpoint, exit_ix):
+        checkpoint[f'item_to_correctness_{exit_ix}'] = self.item_to_correctness
+
+    def on_load_checkpoint(self, checkpoint, exit_ix):
+        self.item_to_correctness = checkpoint[f'item_to_correctness_{exit_ix}']
