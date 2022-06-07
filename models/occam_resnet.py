@@ -93,6 +93,15 @@ def occam_resnet18_cosine_sim(num_classes):
     return occam_resnet18(num_classes, exits_kwargs={'exit_type': CosineSimilarityExitModule})
 
 
+def occam_resnet18_hid_512(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={'exit_hid_dims': [None, 512, 512, 512]})
+
+
+def occam_resnet18_cosine_sim_hid_512(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={'exit_type': CosineSimilarityExitModule,
+                                                     'exit_hid_dims': [None, 512, 512, 512]})
+
+
 def occam_resnet18_thresholded_cosine_sim(num_classes):
     return occam_resnet18(num_classes, exits_kwargs={'exit_type': ThresholdedCosineSimilarityExitModule})
 
