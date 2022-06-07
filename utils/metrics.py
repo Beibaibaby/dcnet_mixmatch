@@ -84,8 +84,8 @@ class Accuracy():
         mpg = self.get_mean_per_group_accuracy('group', factor)
         for k in acc:
             obj[f'Top {k} Acc'] = acc[k]
-            obj[f'Top {k} MPC'] = mpc[k]
-            obj[f'Top {k} MPG'] = mpg[k]
+            # obj[f'Top {k} MPC'] = mpc[k]
+            # obj[f'Top {k} MPG'] = mpg[k]
         return obj
 
     def detailed(self, factor=100):
