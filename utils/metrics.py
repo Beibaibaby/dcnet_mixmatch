@@ -105,7 +105,8 @@ class GateMetric():
         self.exited = 0
         self.threshold = threshold
 
-    def update(self, exit_probas):
+    def update(self, exit_logits):
+        exit_probas = torch.sigmoid(exit_logits)
         for proba in exit_probas:
             if proba >= self.threshold:
                 self.exited += 1

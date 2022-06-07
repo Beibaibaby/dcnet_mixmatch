@@ -73,7 +73,14 @@ def interpolate(x, h, w):
         x = x.unsqueeze(1)
     if x.shape[2] == h and x.shape[3] == w:
         return x
-    return F.interpolate(x, (h, w), mode='bilinear', align_corners=False).squeeze()
+    to_half = False
+    if isinstance(x, torch.HalfTensor):
+        to_half = True
+        x = x.float()
+    x = F.interpolate(x, (h, w), mode='bilinear', align_corners=False).squeeze()
+    if to_half:
+        x = x.half()
+    return x
 
 
 def get_early_exit_cams(model_out, H=None, W=None):

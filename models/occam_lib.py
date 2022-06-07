@@ -65,8 +65,8 @@ class SimpleGate(nn.Module):
         if len(x.shape) == 1:
             x = x.unsqueeze(0)
 
-        x = self.net(x)
-        x = torch.sigmoid(x).squeeze()
+        x = self.net(x).squeeze()
+        # x = torch.sigmoid(x).squeeze()
         return x
 
 
@@ -84,7 +84,7 @@ def get_early_exit_ixs(exit_ix_to_exit_probas):
 
     for exit_ix in exit_ix_to_exit_probas:
         exit_probas = exit_ix_to_exit_probas[exit_ix]
-        use_next_exit = (exit_probas < 0.5).int()
+        use_next_exit = (torch.sigmoid(exit_probas) < 0.5).int()
         early_exit_ixs = torch.where(((1 - use_next_exit) * (1 - has_exited)).bool(),
                                      torch.ones_like(exit_ix_to_exit_probas[0]) * exit_ix,
                                      early_exit_ixs)

@@ -22,3 +22,4 @@ loss:
   name: CrossEntropyLoss
 track_loss: False
 segmentation_class_type: 'max' # 'gt'
+precision: 32

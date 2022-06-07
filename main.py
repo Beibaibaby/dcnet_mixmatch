@@ -52,57 +52,10 @@ def exec(cfg: DictConfig) -> None:
                                 limit_val_batches=cfg.trainer.limit_val_batches,
                                 limit_test_batches=cfg.trainer.limit_test_batches)
         pl_trainer.test(trainer, [loader])
-
     elif cfg.task.name == 'analyze_segmentation':
         from analysis.analyze_segmentation import main_calc_segmentation_metrics
         main_calc_segmentation_metrics(config=cfg,
                                        data_loader=dataloader_factory.build_dataloader_for_split(cfg, cfg.data_split))
-    # elif cfg.task.name == 'visualize_cams':
-    #     if cfg.load_checkpoint is None:
-    #         cfg.load_checkpoint = os.path.join(os.getcwd(), f'ckpt_latest.pt')
-    #     from trainers.visualize_cams import CAMVisualizer
-    #     visualizer = CAMVisualizer(cfg)
-    #     visualizer.visualize(build_dataloader_for_split(cfg, cfg.task.split), cfg.task.item_ixs)
-    # elif cfg.task.name == 'confusion_matrix':
-    #     if cfg.load_checkpoint is None:
-    #         cfg.load_checkpoint = os.path.join(os.getcwd(), f'ckpt_latest.pt')
-    #     from trainers.confusion_matrix import ConfusionMatrixVisualizer
-    #     visualizer = ConfusionMatrixVisualizer(cfg)
-    #     visualizer.save_confusion_matrix(data_loaders['Test']['Val'])
-    # elif cfg.task.name in ['self_consistency_analysis']:
-    #     from analysis.self_consistency import SelfConsistencyAnalysis
-    #     if cfg.load_checkpoint is None:
-    #         cfg.load_checkpoint = os.path.join(cfg.full_expt_dir, f'ckpt_early_stopping.pt')
-    #     runner = eval(cfg.task.runner)(cfg)
-    #     runner.run(data_loaders['Test'])
-    # elif cfg.task.name in ['calibrate', 'calibrate_exit_gates']:
-    #     main_exec = trainer_factory.build_trainer(cfg)  # Has useful functions for the calibration script
-    #     logging.getLogger().info("Config:")
-    #     logging.getLogger().info(OmegaConf.to_yaml(cfg, sort_keys=True, resolve=True))
-    #
-    #     if cfg.task.name == 'calibrate':
-    #         from trainers.calibrator import Calibrator
-    #         logging.getLogger().info(f"Calibrating using logits...")
-    #         calibrator = Calibrator(cfg, main_exec=main_exec)
-    #     elif cfg.task.name == 'calibrate_exit_gates':
-    #         from trainers.exit_gate_calibrator import ExitGateCalibrator
-    #         logging.getLogger().info(f"Calibrating using exit gates...")
-    #         calibrator = ExitGateCalibrator(cfg, main_exec=main_exec)
-    #     calibrator.calibrate(build_dataloader_for_split(cfg, cfg.data_split))
-    # elif cfg.task.name == 'test_exit_strategies':
-    #     if cfg.load_checkpoint is None:
-    #         cfg.load_checkpoint = os.path.join(os.getcwd(), f'ckpt_latest.pt')
-    #
-    #     from trainers.exit_strategy_tester import ExitStrategyTester
-    #     main_exec = ExitStrategyTester(cfg)
-    #     main_exec.test_exit_strategies(data_loaders)
-    # elif cfg.task.name == 'data_driven_init':
-    #     from models.model_factory import build_model
-    #     from projection.data_driven_init import data_driven_initialization
-    #     device = torch.device('cpu')
-    #     model = build_model(cfg, device)
-    #     data_loader = data_loaders['Train']
-    #     data_driven_initialization(model, data_loader, cfg.task.save_dir)
     else:
         data_loaders = dataloader_factory.build_dataloaders(cfg)
         trainer = trainer_factory.build_trainer(cfg)
@@ -117,26 +70,12 @@ def exec(cfg: DictConfig) -> None:
                                 num_sanity_val_steps=0,
                                 limit_train_batches=cfg.trainer.limit_train_batches,
                                 limit_val_batches=cfg.trainer.limit_val_batches,
-                                limit_test_batches=cfg.trainer.limit_test_batches
-                                )
-
+                                limit_test_batches=cfg.trainer.limit_test_batches,
+                                precision=cfg.trainer.precision)
         pl_trainer.fit(trainer,
                        train_dataloaders=data_loaders['train'],
                        val_dataloaders=list(data_loaders['val'].values()))
         pl_trainer.test(trainer, list(data_loaders['test'].values()))
-
-    #
-    # elif cfg.task.name == 'compute_intrinsic_measures':
-    #     if cfg.load_checkpoint is None:
-    #         cfg.load_checkpoint = os.path.join(cfg.full_expt_dir, f'ckpt_latest.pt')
-    #
-    #     trainer = trainer_factory.build_trainer(cfg)
-    #     logging.getLogger().info("Config:")
-    #     logging.getLogger().info(OmegaConf.to_yaml(cfg, sort_keys=True, resolve=True))
-    #
-    #     new_test_loaders = {cfg.data_split: data_loaders['Test'][cfg.data_split]}
-    #     trainer.load_checkpoint_and_test_all(epoch=-1, test_loaders=new_test_loaders, force_save=False)
-    #     compute_intrinsic_measures(trainer.model, trainer=trainer, dataloaders=new_test_loaders)
 
 
 ROOT = '/hdd/robik'

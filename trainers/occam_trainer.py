@@ -218,6 +218,7 @@ class ExitGateLoss():
             _gate_loss_wts = torch.where(gate_gt > 0,
                                          (torch.ones_like(gate_gt) / (_exit_cnt + eps)) ** self.balance_factor,
                                          (torch.ones_like(gate_gt) / (_continue_cnt + eps)) ** self.balance_factor)
-            gate_loss = _gate_loss_wts * F.binary_cross_entropy(gates, gate_gt.float(), reduction='none')
+            # gate_loss = _gate_loss_wts * F.binary_cross_entropy(gates, gate_gt.float(), reduction='none')
+            gate_loss = _gate_loss_wts * F.binary_cross_entropy_with_logits(gates, gate_gt.float(), reduction='none')
             return gate_loss.mean()
         return torch.zeros_like(logits.max(dim=1)[0])
