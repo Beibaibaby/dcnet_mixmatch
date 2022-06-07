@@ -102,3 +102,7 @@ def to_numpy_img(tensor):
 
 def get_dir(file_path):
     return '/'.join(file_path.split('/')[:-1])
+
+
+def inv_sigmoid(x):
+    return torch.log(x) - torch.log(1 - x)

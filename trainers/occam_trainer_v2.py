@@ -102,7 +102,7 @@ class OccamTrainerv2(OccamTrainer):
             if hasattr(self, metric_key):
                 seg_metric_vals = getattr(self, metric_key).summary()
                 for sk in seg_metric_vals:
-                    self.log(f"{exit_name} intermediate {sk}", seg_metric_vals[sk])
+                    self.log(f"{split} {loader_key} {exit_name} intermediate {sk}", seg_metric_vals[sk])
 
 
 class GateWeightedCELoss():

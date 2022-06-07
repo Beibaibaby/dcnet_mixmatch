@@ -52,7 +52,7 @@ class Accuracy():
                     = self.correct_dict[group_type][group_name][k] / self.total_dict[group_type][group_name] * factor
         return per_group_accuracy
 
-    def get_mean_per_group_accuracy(self, group_type='group', factor=1):
+    def get_mean_per_group_accuracy(self, group_type='group', factor=1, topK=None):
         per_group_accuracy = self.get_per_group_accuracy(group_type)
         mpg = {}
         for k in self.top_k:
@@ -61,7 +61,10 @@ class Accuracy():
                 total_acc += per_group_accuracy[group_name][k]
                 total_num += 1
             mpg[k] = total_acc / total_num * factor
-        return mpg
+        if topK is not None:
+            return mpg[topK]
+        else:
+            return mpg
 
     def get_accuracy(self, group_type='class', factor=1):
         acc_dict = {}
@@ -105,8 +108,8 @@ class GateMetric():
         self.exited = 0
         self.threshold = threshold
 
-    def update(self, exit_logits):
-        exit_probas = torch.sigmoid(exit_logits)
+    def update(self, exit_probas):
+        # exit_probas = torch.sigmoid(exit_logits)
         for proba in exit_probas:
             if proba >= self.threshold:
                 self.exited += 1

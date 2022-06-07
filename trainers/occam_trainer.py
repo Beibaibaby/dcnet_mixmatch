@@ -7,6 +7,7 @@ from utils.metrics import Accuracy
 from models.occam_lib import MultiExitStats
 from analysis.analyze_segmentation import SegmentationMetrics, save_exitwise_heatmaps
 from utils.cam_utils import get_class_cams_for_occam_nets, get_early_exit_cams
+from utils.data_utils import inv_sigmoid
 
 
 class OccamTrainer(BaseTrainer):
@@ -89,7 +90,7 @@ class OccamTrainer(BaseTrainer):
         loader_keys = self.get_dataloader_keys(split)
         for loader_key in loader_keys:
             me_stats = getattr(self, f'{split}_{loader_key}_multi_exit_stats')
-            self.log_dict(me_stats.summary())
+            self.log_dict(me_stats.summary(prefix=f'{split} {loader_key} '))
 
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         if 'mask' not in batch:
@@ -133,7 +134,7 @@ class OccamTrainer(BaseTrainer):
             if hasattr(self, metric_key):
                 seg_metric_vals = getattr(self, metric_key).summary()
                 for sk in seg_metric_vals:
-                    self.log(f"{exit_name} {sk}", seg_metric_vals[sk])
+                    self.log(f"{split} {loader_key} {exit_name} {sk}", seg_metric_vals[sk])
 
 
 class GateWeightedCELoss():
@@ -208,8 +209,10 @@ class ExitGateLoss():
         """
         pred_ys = torch.argmax(logits, dim=1)
         self.accuracy.update(logits, gt_ys, gt_ys, gt_ys)
-        if self.accuracy.get_mean_per_group_accuracy('class')[1] <= self.acc_threshold or force_use:
-            gate_gt = (pred_ys == gt_ys.squeeze()).long()
+        mpg = self.accuracy.get_mean_per_group_accuracy('class', topK=1)
+
+        if mpg <= self.acc_threshold or force_use:
+            gate_gt = (pred_ys == gt_ys.squeeze()).long().type(gates.type())
             _exit_cnt, _continue_cnt = gate_gt.sum().detach(), (1 - gate_gt).sum().detach()
 
             # Assign balanced weights to exit vs continue preds
@@ -218,7 +221,8 @@ class ExitGateLoss():
             _gate_loss_wts = torch.where(gate_gt > 0,
                                          (torch.ones_like(gate_gt) / (_exit_cnt + eps)) ** self.balance_factor,
                                          (torch.ones_like(gate_gt) / (_continue_cnt + eps)) ** self.balance_factor)
+            # gate_loss = _gate_loss_wts * F.binary_cross_entropy_with_logits(inv_sigmoid(gates), gate_gt.float(), reduction='none')
             # gate_loss = _gate_loss_wts * F.binary_cross_entropy(gates, gate_gt.float(), reduction='none')
-            gate_loss = _gate_loss_wts * F.binary_cross_entropy_with_logits(gates, gate_gt.float(), reduction='none')
+            gate_loss = _gate_loss_wts * F.mse_loss(gates, gate_gt, reduction='none')
             return gate_loss.mean()
-        return torch.zeros_like(logits.max(dim=1)[0])
+        return torch.zeros(len(logits)).to(logits.device)

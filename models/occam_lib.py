@@ -65,8 +65,8 @@ class SimpleGate(nn.Module):
         if len(x.shape) == 1:
             x = x.unsqueeze(0)
 
-        x = self.net(x).squeeze()
-        # x = torch.sigmoid(x).squeeze()
+        x = self.net(x)
+        x = torch.sigmoid(x).squeeze()
         return x
 
 
@@ -84,7 +84,7 @@ def get_early_exit_ixs(exit_ix_to_exit_probas):
 
     for exit_ix in exit_ix_to_exit_probas:
         exit_probas = exit_ix_to_exit_probas[exit_ix]
-        use_next_exit = (torch.sigmoid(exit_probas) < 0.5).int()
+        use_next_exit = (exit_probas < 0.5).int()
         early_exit_ixs = torch.where(((1 - use_next_exit) * (1 - has_exited)).bool(),
                                      torch.ones_like(exit_ix_to_exit_probas[0]) * exit_ix,
                                      early_exit_ixs)
@@ -359,12 +359,12 @@ class MultiExitStats:
             gate_vals = exit_outs[gate_key]
             self.exit_ix_to_stats[exit_ix]['gate'].update(gate_vals)
 
-    def summary(self):
+    def summary(self, prefix=''):
         exit_to_summary = {}
         for exit_ix in self.exit_ix_to_stats:
             for k in self.exit_ix_to_stats[exit_ix]:
                 for k2 in self.exit_ix_to_stats[exit_ix][k].summary():
-                    exit_to_summary[f"E={exit_ix} {k2}"] = self.exit_ix_to_stats[exit_ix][k].summary()[k2]
+                    exit_to_summary[f"{prefix}E={exit_ix} {k2}"] = self.exit_ix_to_stats[exit_ix][k].summary()[k2]
         return exit_to_summary
 
 
@@ -434,7 +434,6 @@ class SimilarityExitModule(ExitModule):
         out['ref_mask_scores'] = self.calc_similarity(hid, top_k_ixs).reshape(len(x),
                                                                               out['ref_hid'].shape[2],
                                                                               out['ref_hid'].shape[3])
-
         return out
 
 
@@ -448,55 +447,6 @@ class ThresholdedCosineSimilarityExitModule(SimilarityExitModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.similarity_fn = thresholded_cosine_similarity
-
-
-# class SimilarityBasedMultiExitModule(MultiExitModule):
-#     def forward(self, block_num_to_exit_in, y=None):
-#         biased_exit_ixs = [0]
-#         exit_outs = {}
-#         hid_h, hid_w = None, None
-#         all_top_k_ixs = None
-#
-#         # Step 1: Get top_k_ixs from each of the exits (barring E.0)
-#         exit_ix = 0
-#         for block_num in block_num_to_exit_in:
-#             if block_num in self.exit_block_nums:
-#                 exit_in = block_num_to_exit_in[block_num]
-#                 if exit_ix in self.detached_exit_ixs:
-#                     exit_in = exit_in.detach()
-#                 hid, top_k_ixs, out = self.exits[exit_ix].forward_and_get_top_k_cells(exit_in, y=y)
-#                 for k in out:
-#                     exit_outs[f'E={exit_ix}, {k}'] = out[k]
-#
-#                 # Aggregate a common top_k_ixs
-#                 if exit_ix not in biased_exit_ixs:
-#                     if all_top_k_ixs is None:
-#                         all_top_k_ixs = top_k_ixs.clone()
-#                     else:
-#                         all_top_k_ixs = torch.cat([all_top_k_ixs, top_k_ixs], dim=1)
-#
-#                 # Verify that all the exits have same spatial dims (albeit resized)
-#                 if hid_h is not None:
-#                     assert hid.shape[2] == hid_h
-#                     assert hid.shape[3] == hid_w
-#                 hid_h, hid_w = hid.shape[2], hid.shape[3]
-#                 exit_ix += 1
-#
-#         # Step 2: Measure similarity using the same top_k_ixs in all the exits
-#         exit_ix = 0
-#         for block_num in block_num_to_exit_in:
-#             if block_num in self.exit_block_nums:
-#                 if exit_ix in biased_exit_ixs:
-#                     curr_top_k_ixs = exit_outs[f"E={exit_ix}, ref_top_k_ixs"][exit_ix]
-#                 else:
-#                     curr_top_k_ixs = all_top_k_ixs
-#                 similarity = self.exits[exit_ix].calc_similarity(exit_outs[f"E={exit_ix}, ref_hid"], curr_top_k_ixs)
-#                 exit_outs[f'E={exit_ix}, ref_mask_scores'] = similarity
-#                 exit_ix += 1
-#
-#         # Get names of triggered exits
-#         self.get_early_exits(exit_outs)
-#         return exit_outs
 
 
 def visualize_reference_masks(img, sim_scores, top_k_cells, mask_h, mask_w, save_path):
@@ -559,3 +509,52 @@ def visualize_reference_masks(img, sim_scores, top_k_cells, mask_h, mask_w, save
 #         model_out['ref_hid'] = hid
 #         model_out['ref_mask_scores'] = similarity
 #         return model_out
+
+
+# class SimilarityBasedMultiExitModule(MultiExitModule):
+#     def forward(self, block_num_to_exit_in, y=None):
+#         biased_exit_ixs = [0]
+#         exit_outs = {}
+#         hid_h, hid_w = None, None
+#         all_top_k_ixs = None
+#
+#         # Step 1: Get top_k_ixs from each of the exits (barring E.0)
+#         exit_ix = 0
+#         for block_num in block_num_to_exit_in:
+#             if block_num in self.exit_block_nums:
+#                 exit_in = block_num_to_exit_in[block_num]
+#                 if exit_ix in self.detached_exit_ixs:
+#                     exit_in = exit_in.detach()
+#                 hid, top_k_ixs, out = self.exits[exit_ix].forward_and_get_top_k_cells(exit_in, y=y)
+#                 for k in out:
+#                     exit_outs[f'E={exit_ix}, {k}'] = out[k]
+#
+#                 # Aggregate a common top_k_ixs
+#                 if exit_ix not in biased_exit_ixs:
+#                     if all_top_k_ixs is None:
+#                         all_top_k_ixs = top_k_ixs.clone()
+#                     else:
+#                         all_top_k_ixs = torch.cat([all_top_k_ixs, top_k_ixs], dim=1)
+#
+#                 # Verify that all the exits have same spatial dims (albeit resized)
+#                 if hid_h is not None:
+#                     assert hid.shape[2] == hid_h
+#                     assert hid.shape[3] == hid_w
+#                 hid_h, hid_w = hid.shape[2], hid.shape[3]
+#                 exit_ix += 1
+#
+#         # Step 2: Measure similarity using the same top_k_ixs in all the exits
+#         exit_ix = 0
+#         for block_num in block_num_to_exit_in:
+#             if block_num in self.exit_block_nums:
+#                 if exit_ix in biased_exit_ixs:
+#                     curr_top_k_ixs = exit_outs[f"E={exit_ix}, ref_top_k_ixs"][exit_ix]
+#                 else:
+#                     curr_top_k_ixs = all_top_k_ixs
+#                 similarity = self.exits[exit_ix].calc_similarity(exit_outs[f"E={exit_ix}, ref_hid"], curr_top_k_ixs)
+#                 exit_outs[f'E={exit_ix}, ref_mask_scores'] = similarity
+#                 exit_ix += 1
+#
+#         # Get names of triggered exits
+#         self.get_early_exits(exit_outs)
+#         return exit_outs
