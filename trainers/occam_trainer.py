@@ -124,7 +124,7 @@ class OccamTrainer(BaseTrainer):
             gt_mask = batch['mask'][0]
             for en in exit_to_heat_maps:
                 _exit_to_heat_maps[en] = exit_to_heat_maps[en][0]
-            save_dir = os.path.join(os.getcwd(), f'visualizations/{batch_idx}')
+            save_dir = os.path.join(os.getcwd(), f'visualizations_{self.current_epoch}/{batch_idx}')
             save_exitwise_heatmaps(original, gt_mask, _exit_to_heat_maps, save_dir, heat_map_suffix=heat_map_suffix)
 
     def segmentation_metric_epoch_end(self, split, loader_key):

@@ -1,7 +1,7 @@
 #!/bin/bash
 source activate occamnets
 
-GPU=3
+GPU=0
 dataset=image_net
 optim=image_net
 subset_percent=8

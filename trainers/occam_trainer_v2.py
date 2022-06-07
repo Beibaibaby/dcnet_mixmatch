@@ -27,7 +27,7 @@ class OccamTrainerv2(OccamTrainer):
 
         # Compute Ref MSE loss
         ref_mse_cfg = self.trainer_cfg.ref_mse_loss
-        if ref_mse_cfg.loss_wt != 0.0:
+        if ref_mse_cfg.loss_wt != 0.0 and self.current_epoch >= ref_mse_cfg.start_epoch:
             mse_loss = RefMSELoss()(model_out[f'E={exit_ix}, ref_mask_scores'],
                                     model_out[f'E={exit_ix}, cam'],
                                     batch['y'])
