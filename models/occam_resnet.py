@@ -66,17 +66,18 @@ class OccamResNet(VariableWidthResNet):
         return self.multi_exit
 
 
-def occam_resnet18_img64(num_classes):
+def occam_resnet18_img64(num_classes, width=58, multi_exit_type=MultiExitModule, exits_kwargs={}):
+    if 'exit_out_dims' not in exits_kwargs:
+        exits_kwargs['exit_out_dims'] = num_classes
     return OccamResNet(block=BasicBlock,
                        layers=[2, 2, 2, 2],
-                       width=58,
+                       width=width,
                        initial_kernel_size=3,
                        initial_stride=1,
                        initial_padding=1,
                        use_initial_max_pooling=False,
-                       exits_kwargs={
-                           'exit_out_dims': num_classes,
-                       })
+                       multi_exit_type=multi_exit_type,
+                       exits_kwargs=exits_kwargs)
 
 
 def occam_resnet18(num_classes, width=58, multi_exit_type=MultiExitModule, exits_kwargs={}):
@@ -91,6 +92,10 @@ def occam_resnet18(num_classes, width=58, multi_exit_type=MultiExitModule, exits
 
 def occam_resnet18_cosine_sim(num_classes):
     return occam_resnet18(num_classes, exits_kwargs={'exit_type': CosineSimilarityExitModule})
+
+
+def occam_resnet18_img64_cosine_sim(num_classes):
+    return occam_resnet18_img64(num_classes, exits_kwargs={'exit_type': CosineSimilarityExitModule})
 
 
 def occam_resnet18_hid_512(num_classes):

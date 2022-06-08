@@ -103,12 +103,14 @@ class OccamTrainer(BaseTrainer):
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         if 'mask' not in batch:
             return
+
         loader_key = self.get_loader_name(split, dataloader_idx)
 
         # Per-exit segmentation metrics
         exit_to_class_cams = {}
         for exit_name in self.model.multi_exit.get_exit_names():
             metric_key = f'{exit_name}_{split}_{loader_key}_segmentation_metrics'
+
             if batch_idx == 0:
                 setattr(self, metric_key, SegmentationMetrics())
             gt_masks = batch['mask']
@@ -243,9 +245,9 @@ class ExitGateLoss():
                                      (torch.ones_like(gate_gt) / (_exit_cnt + eps)) ** self.balance_factor,
                                      (torch.ones_like(gate_gt) / (_continue_cnt + eps)) ** self.balance_factor)
 
-        gate_loss = _gate_loss_wts * F.binary_cross_entropy(gates, gate_gt, reduction='none')
+        # gate_loss = _gate_loss_wts * F.binary_cross_entropy(gates, gate_gt, reduction='none')
         # gate_loss = _gate_loss_wts * F.binary_cross_entropy_with_logits(inv_sigmoid(gates), gate_gt, reduction='none')
-        # gate_loss = _gate_loss_wts * F.mse_loss(gates, gate_gt, reduction='none')
+        gate_loss = _gate_loss_wts * F.mse_loss(gates, gate_gt, reduction='none')
         return gate_loss.mean()
 
     def on_epoch_start(self):

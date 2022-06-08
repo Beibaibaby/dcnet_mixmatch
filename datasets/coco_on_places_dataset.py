@@ -175,3 +175,6 @@ def create_coco_on_places_dataloaders(config):
         out['test'][split] = create_coco_on_places_dataloader_for_split(config.dataset, split)
 
     return out
+
+def create_coco_on_places_with_mask_dataloaders(config):
+    return create_coco_on_places_dataloaders(config)
