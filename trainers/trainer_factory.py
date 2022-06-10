@@ -5,6 +5,7 @@ from trainers.base_trainer import *
 # from trainers.spectral_decoupling_trainer import *
 from trainers.pgi_trainer import *
 from trainers.occam_trainer import *
+# from trainers.occam_trainer_v2old import *
 from trainers.occam_trainer_v2 import *
 
 

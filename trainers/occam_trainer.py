@@ -263,3 +263,6 @@ class ExitGateLoss():
 
     def on_load_checkpoint(self, checkpoint, exit_ix):
         self.item_to_correctness = checkpoint[f'item_to_correctness_{exit_ix}']
+
+    def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
+        accuracy.update(model_out['E=early, logits'], batch['y'], batch['class_name'], batch['group_name'])

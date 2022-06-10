@@ -44,7 +44,11 @@ class BaseTrainer(pl.LightningModule):
     def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_out=None):
         if model_out is None:
             model_out = self(batch['x'])
-        self.accuracy_metric_step(batch, batch_idx, model_out, split, dataloader_idx)
+        if batch_idx == 0:
+            accuracy = Accuracy()
+            setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy', accuracy)
+        accuracy = getattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy')
+        self.accuracy_metric_step(batch, batch_idx, model_out, split, dataloader_idx, accuracy)
         self.segmentation_metric_step(batch, batch_idx, model_out, split, dataloader_idx)
 
     def validation_epoch_end(self, outputs):
@@ -102,13 +106,7 @@ class BaseTrainer(pl.LightningModule):
     def set_iters_per_epoch(self, iters_per_epoch):
         self.iters_per_epoch = iters_per_epoch
 
-    def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
-        if batch_idx == 0:
-            accuracy = Accuracy()
-            setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy', accuracy)
-        accuracy = getattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy')
-        if isinstance(model_out, dict):
-            model_out = model_out['E=early, logits']
+    def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out, batch['y'], batch['class_name'], batch['group_name'])
 
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
@@ -119,10 +117,16 @@ class BaseTrainer(pl.LightningModule):
         if batch_idx == 0:
             setattr(self, metric_key, SegmentationMetrics())
         gt_masks = batch['mask']
-        classes = batch['y'] if self.trainer_cfg.segmentation_class_type == 'gt' else model_out.argmax(dim=-1)
         torch.set_grad_enabled(True)
-        getattr(self, metric_key).update(gt_masks, get_class_cams(batch['x'], self.model, classes)) # HAVING AN ISSUE WITH MIXED PREC
+        getattr(self, metric_key).update(gt_masks, self.get_class_cams(batch, model_out)) # HAVING AN ISSUE WITH MIXED PREC
         torch.set_grad_enabled(False)
+
+    def get_class_cams(self, batch, model_out):
+        classes = batch['y'] if self.trainer_cfg.segmentation_class_type == 'gt' else model_out.argmax(dim=-1)
+        return get_class_cams(batch['x'], self.model, classes)
+
+
+
 
     def segmentation_metric_epoch_end(self, split, loader_key):
         # Log segmentation metrics

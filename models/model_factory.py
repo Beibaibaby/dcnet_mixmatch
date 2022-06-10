@@ -10,6 +10,7 @@ from models.occam_densenet import *
 # from models.occam_mobile_net import *
 # from models.resnet_group_norm import *
 # from models.occam_resnet_shared_exit import *
+from models.occam_resnet_v2 import *
 
 
 def build_model(model_config):
