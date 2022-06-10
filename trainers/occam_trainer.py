@@ -1,3 +1,4 @@
+import logging
 import os
 
 from trainers.base_trainer import BaseTrainer
@@ -131,12 +132,13 @@ class OccamTrainer(BaseTrainer):
         """
         _exit_to_heat_maps = {}
         if batch_idx % self.config.trainer.visualize_every_n_step == 0:
-            original = batch['x'][0]
-            gt_mask = batch['mask'][0]
-            for en in exit_to_heat_maps:
-                _exit_to_heat_maps[en] = exit_to_heat_maps[en][0]
-            save_dir = os.path.join(os.getcwd(), f'visualizations_{self.current_epoch}/{batch_idx}')
-            save_exitwise_heatmaps(original, gt_mask, _exit_to_heat_maps, save_dir, heat_map_suffix=heat_map_suffix)
+            # original = batch['x'][0]
+            # gt_mask = batch['mask'][0]
+            for ix, (original, gt_mask) in enumerate(zip(batch['x'], batch['mask'])):
+                for en in exit_to_heat_maps:
+                    _exit_to_heat_maps[en] = exit_to_heat_maps[en][ix]
+                save_dir = os.path.join(os.getcwd(), f'visualizations_{self.current_epoch}/{batch_idx}_{ix}')
+                save_exitwise_heatmaps(original, gt_mask, _exit_to_heat_maps, save_dir, heat_map_suffix=heat_map_suffix)
 
     def segmentation_metric_epoch_end(self, split, loader_key):
         for exit_name in self.model.multi_exit.get_exit_names():
@@ -152,7 +154,10 @@ class OccamTrainer(BaseTrainer):
 
     def on_load_checkpoint(self, checkpoint):
         for exit_ix in range(len(self.model.multi_exit.exit_block_nums)):
-            getattr(self, f'ExitGateLoss_{exit_ix}').on_load_checkpoint(checkpoint, exit_ix)
+            try:
+                getattr(self, f'ExitGateLoss_{exit_ix}').on_load_checkpoint(checkpoint, exit_ix)
+            except:
+                logging.getLogger().error(f"Could not load {f'ExitGateLoss_{exit_ix}'}")
 
 
 class GateWeightedCELoss():

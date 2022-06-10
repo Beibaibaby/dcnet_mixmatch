@@ -16,7 +16,7 @@ pip install emnist
 conda install --yes h5py
 
 # Analysis/results
-pip install grad-cam
+#pip install grad-cam
 conda install --yes scikit-learn==1.0.1
 pip install matplotlib
 pip install seaborn

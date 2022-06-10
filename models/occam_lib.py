@@ -370,7 +370,7 @@ class MultiExitStats:
 
 
 class SimilarityExitModule(ExitModule):
-    def __init__(self, similarity_fn=cosine_similarity, top_k=1, top_k_type='max', layer='exit_in',
+    def __init__(self, similarity_fn=cosine_similarity, top_k=3, top_k_type='max', layer='exit_in',
                  **kwargs):
         super(SimilarityExitModule, self).__init__(**kwargs)
         self.top_k = top_k

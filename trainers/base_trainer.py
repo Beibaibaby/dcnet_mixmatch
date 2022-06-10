@@ -121,7 +121,7 @@ class BaseTrainer(pl.LightningModule):
         gt_masks = batch['mask']
         classes = batch['y'] if self.trainer_cfg.segmentation_class_type == 'gt' else model_out.argmax(dim=-1)
         torch.set_grad_enabled(True)
-        getattr(self, metric_key).update(gt_masks, get_class_cams(batch['x'], self.model, classes))
+        getattr(self, metric_key).update(gt_masks, get_class_cams(batch['x'], self.model, classes)) # HAVING AN ISSUE WITH MIXED PREC
         torch.set_grad_enabled(False)
 
     def segmentation_metric_epoch_end(self, split, loader_key):

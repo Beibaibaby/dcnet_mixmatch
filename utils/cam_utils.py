@@ -3,9 +3,10 @@ import numpy as np
 import torch
 import cv2
 import torch.nn.functional as F
+from utils.data_utils import get_dir
+import sys
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-from utils.data_utils import get_dir
 
 
 def cams_to_masks(cams, threshold=None):
@@ -290,9 +291,10 @@ def get_early_exit_features(early_exit_names, exit_name_to_feats, H=None, W=None
 
 
 def get_class_cams(x, model, classes):
-    grad_cam = GradCAM(model=model, target_layers=get_target_layers(model))
+    m = model.to(torch.float32)
+    grad_cam = GradCAM(model=m, target_layers=get_target_layers(m))
     targets = [ClassifierOutputTarget(int(y)) for y in classes]
-    return torch.from_numpy(grad_cam(input_tensor=x, targets=targets))
+    return torch.from_numpy(grad_cam(input_tensor=x.to(torch.float32), targets=targets))
 
 
 def imwrite(save_file, img):

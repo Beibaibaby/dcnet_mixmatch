@@ -302,7 +302,7 @@ def save_exitwise_heatmaps(original, gt_mask, exit_to_heatmaps, save_dir, heat_m
     for exit_ix in exit_to_heatmaps:
         _exit_hm = compute_heatmap(original, exit_to_heatmaps[exit_ix])
         imwrite(os.path.join(save_dir, f'hm_exit_{exit_ix}{heat_map_suffix}.jpg'), _exit_hm)
-        # print(f"Saved to {save_dir}")
+        print(f"Saved to {os.path.join(save_dir, f'hm_exit_{exit_ix}{heat_map_suffix}.jpg')}")
 
 
 def to_numpy_img(tensor):
