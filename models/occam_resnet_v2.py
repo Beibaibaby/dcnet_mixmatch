@@ -3,16 +3,20 @@ from models.variable_width_resnet import VariableWidthResNet, BasicBlock, Bottle
 
 
 class SharedExit(nn.Module):
-    def __init__(self, in_channels, out_channels,
-                 kernel_size=3, stride=None):
+    def __init__(self, in_channels, out_channels, n_layers=1, hid_channels=512, kernel_size=3, stride=None):
         super().__init__()
         if stride is None:
             stride = kernel_size // 2
-        self.cam = nn.Conv2d(in_channels=in_channels,
-                             out_channels=out_channels,
-                             kernel_size=kernel_size,
-                             stride=stride,
-                             padding=kernel_size // 2)
+        layers = []
+        _in_ch = in_channels
+        for layer_ix in range(n_layers):
+            _out_ch = out_channels if layer_ix == n_layers - 1 else hid_channels
+            layers.append(nn.Conv2d(in_channels=_in_ch, out_channels=_out_ch, kernel_size=kernel_size,
+                                    padding=kernel_size // 2, stride=stride))
+            if layer_ix < n_layers - 1:
+                layers.append(nn.BatchNorm2d(_out_ch))
+            _in_ch = _out_ch
+        self.cam = nn.Sequential(*layers)
 
     def forward(self, x_list):
         """
@@ -33,6 +37,16 @@ class SharedExit(nn.Module):
             'cams': cams,
             'logits': F.adaptive_avg_pool2d(cams, (1)).squeeze()
         }
+
+
+class SharedExit2(SharedExit):
+    def __init__(self, in_channels, out_channels, hid_channels=512, kernel_size=3, stride=None):
+        super().__init__(in_channels, out_channels, 2, hid_channels, kernel_size, stride)
+
+
+class SharedExit3(SharedExit):
+    def __init__(self, in_channels, out_channels, hid_channels=512, kernel_size=3, stride=None):
+        super().__init__(in_channels, out_channels, 3, hid_channels, kernel_size, stride)
 
 
 class OccamResNetV2(VariableWidthResNet):
@@ -98,6 +112,14 @@ def occam_resnet18_v2(num_classes, width=64, exit_type=SharedExit):
                          width=width,
                          exit_type=exit_type,
                          num_classes=num_classes)
+
+
+def occam_resnet18_v2_ex2(num_classes):
+    return occam_resnet18_v2(num_classes, exit_type=SharedExit2)
+
+
+def occam_resnet18_v2_ex3(num_classes):
+    return occam_resnet18_v2(num_classes, exit_type=SharedExit3)
 
 
 if __name__ == "__main__":

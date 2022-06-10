@@ -302,7 +302,35 @@ def save_exitwise_heatmaps(original, gt_mask, exit_to_heatmaps, save_dir, heat_m
     for exit_ix in exit_to_heatmaps:
         _exit_hm = compute_heatmap(original, exit_to_heatmaps[exit_ix])
         imwrite(os.path.join(save_dir, f'hm_exit_{exit_ix}{heat_map_suffix}.jpg'), _exit_hm)
-        print(f"Saved to {os.path.join(save_dir, f'hm_exit_{exit_ix}{heat_map_suffix}.jpg')}")
+        # print(f"Saved to {os.path.join(save_dir, f'hm_exit_{exit_ix}{heat_map_suffix}.jpg')}")
+
+
+def save_heatmap(original, heatmap, save_dir, heat_map_suffix='', gt_mask=None):
+    """
+
+    :param original: original image where the heatmaps will be placed
+    :param gt_mask:
+    :param heatmap:
+    :param save_dir:
+    :param heat_map_suffix:
+    :return:
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    imwrite(os.path.join(save_dir, 'original.jpg'), to_numpy_img(original))
+    ow, oh = original.shape[1], original.shape[2]
+    original = (original - original.min()) / (original.max() - original.min())
+
+    # Only show regions present in the gt mask
+    if gt_mask is not None:
+        _inter_mask = torch.relu(interpolate(gt_mask.unsqueeze(0).detach().cpu(), oh, ow) - 0.5).squeeze()
+        imwrite(os.path.join(save_dir, 'true_mask.jpg'),
+                to_numpy_img(original.detach().cpu() * _inter_mask)
+                .squeeze())
+
+    # Heat maps
+    _exit_hm = compute_heatmap(original, heatmap)
+    imwrite(os.path.join(save_dir, f'hm{heat_map_suffix}.jpg'), _exit_hm)
+    # print(f"Saved to {os.path.join(save_dir, f'hm{heat_map_suffix}.jpg')}")
 
 
 def to_numpy_img(tensor):

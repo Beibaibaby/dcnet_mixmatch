@@ -113,25 +113,27 @@ class BaseTrainer(pl.LightningModule):
         if 'mask' not in batch:
             return
         dataloader_key = self.get_loader_name(split, dataloader_idx)
-        metric_key = f'{split}_{dataloader_key}_segmentation_metrics'
-        if batch_idx == 0:
-            setattr(self, metric_key, SegmentationMetrics())
-        gt_masks = batch['mask']
-        torch.set_grad_enabled(True)
-        getattr(self, metric_key).update(gt_masks, self.get_class_cams(batch, model_out)) # HAVING AN ISSUE WITH MIXED PREC
-        torch.set_grad_enabled(False)
+        for cls_type in ['gt', 'pred']:  # Save segmentation metrics wrt GT vs predicted classes
+            metric_key = f'{cls_type}_{split}_{dataloader_key}_segmentation_metrics'
+            if batch_idx == 0:
+                setattr(self, metric_key, SegmentationMetrics())
+            gt_masks = batch['mask']
+            torch.set_grad_enabled(True)
+            getattr(self, metric_key).update(gt_masks, self.get_class_cams(batch, model_out, cls_type))
+            torch.set_grad_enabled(False)
 
-    def get_class_cams(self, batch, model_out):
-        classes = batch['y'] if self.trainer_cfg.segmentation_class_type == 'gt' else model_out.argmax(dim=-1)
+    def get_class_cams(self, batch, model_out, class_type):
+        classes = self.get_classes(batch, model_out, class_type)
         return get_class_cams(batch['x'], self.model, classes)
 
-
-
+    def get_classes(self, batch, logits, class_type):
+        return batch['y'] if class_type == 'gt' else logits.argmax(dim=-1)
 
     def segmentation_metric_epoch_end(self, split, loader_key):
         # Log segmentation metrics
-        metric_key = f'{split}_{loader_key}_segmentation_metrics'
-        if hasattr(self, metric_key):
-            seg_metric_vals = getattr(self, metric_key).summary()
-            for sk in seg_metric_vals:
-                self.log(f"{sk}", seg_metric_vals[sk])
+        for cls_type in ['gt', 'pred']:
+            metric_key = f'{cls_type}_{split}_{loader_key}_segmentation_metrics'
+            if hasattr(self, metric_key):
+                seg_metric_vals = getattr(self, metric_key).summary()
+                for sk in seg_metric_vals:
+                    self.log(f"{sk}", seg_metric_vals[sk])

@@ -85,7 +85,6 @@ class OccamTrainer(BaseTrainer):
     def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None):
         if model_outputs is None:
             model_outputs = self(batch['x'])
-
         super().shared_validation_step(batch, batch_idx, split, dataloader_idx, model_outputs)
         if batch_idx == 0:
             me_stats = MultiExitStats()
@@ -108,19 +107,20 @@ class OccamTrainer(BaseTrainer):
         loader_key = self.get_loader_name(split, dataloader_idx)
 
         # Per-exit segmentation metrics
-        exit_to_class_cams = {}
-        for exit_name in self.model.multi_exit.get_exit_names():
-            metric_key = f'{exit_name}_{split}_{loader_key}_segmentation_metrics'
+        for cls_type in ['gt', 'pred']:
+            exit_to_class_cams = {}
 
-            if batch_idx == 0:
-                setattr(self, metric_key, SegmentationMetrics())
-            gt_masks = batch['mask']
-            classes = batch['y'] if self.trainer_cfg.segmentation_class_type == 'gt' else model_out[
-                f"{exit_name}, logits"].argmax(dim=-1)
-            class_cams = get_class_cams_for_occam_nets(model_out[f"{exit_name}, cam"], classes)
-            getattr(self, metric_key).update(gt_masks, class_cams)
-            exit_to_class_cams[exit_name] = class_cams
-        self.save_heat_maps_step(batch_idx, batch, exit_to_class_cams)
+            for exit_name in self.model.multi_exit.get_exit_names():
+                metric_key = f'{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
+
+                if batch_idx == 0:
+                    setattr(self, metric_key, SegmentationMetrics())
+                gt_masks = batch['mask']
+                classes = batch['y'] if cls_type == 'gt' else model_out[f"{exit_name}, logits"].argmax(dim=-1)
+                class_cams = get_class_cams_for_occam_nets(model_out[f"{exit_name}, cam"], classes)
+                getattr(self, metric_key).update(gt_masks, class_cams)
+                exit_to_class_cams[exit_name] = class_cams
+            self.save_heat_maps_step(batch_idx, batch, exit_to_class_cams, heat_map_suffix=f"_{cls_type}")
 
     def save_heat_maps_step(self, batch_idx, batch, exit_to_heat_maps, heat_map_suffix=''):
         """
@@ -131,22 +131,20 @@ class OccamTrainer(BaseTrainer):
         :return:
         """
         _exit_to_heat_maps = {}
-        if batch_idx % self.config.trainer.visualize_every_n_step == 0:
-            # original = batch['x'][0]
-            # gt_mask = batch['mask'][0]
-            for ix, (original, gt_mask) in enumerate(zip(batch['x'], batch['mask'])):
-                for en in exit_to_heat_maps:
-                    _exit_to_heat_maps[en] = exit_to_heat_maps[en][ix]
-                save_dir = os.path.join(os.getcwd(), f'visualizations_{self.current_epoch}/{batch_idx}_{ix}')
-                save_exitwise_heatmaps(original, gt_mask, _exit_to_heat_maps, save_dir, heat_map_suffix=heat_map_suffix)
+        for en in exit_to_heat_maps:
+            _exit_to_heat_maps[en] = exit_to_heat_maps[en][0]
+        save_dir = os.path.join(os.getcwd(), f'visualizations_ep{self.current_epoch}_b{batch_idx}')
+        gt_mask = None if 'mask' not in batch else batch['mask'][0]
+        save_exitwise_heatmaps(batch['x'][0], gt_mask, _exit_to_heat_maps, save_dir, heat_map_suffix=heat_map_suffix)
 
     def segmentation_metric_epoch_end(self, split, loader_key):
-        for exit_name in self.model.multi_exit.get_exit_names():
-            metric_key = f'{exit_name}_{split}_{loader_key}_segmentation_metrics'
-            if hasattr(self, metric_key):
-                seg_metric_vals = getattr(self, metric_key).summary()
-                for sk in seg_metric_vals:
-                    self.log(f"{split} {loader_key} {exit_name} {sk}", seg_metric_vals[sk])
+        for cls_type in ['gt', 'pred']:
+            for exit_name in self.model.multi_exit.get_exit_names():
+                metric_key = f'{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
+                if hasattr(self, metric_key):
+                    seg_metric_vals = getattr(self, metric_key).summary()
+                    for sk in seg_metric_vals:
+                        self.log(f"{cls_type} {split} {loader_key} {exit_name} {sk}", seg_metric_vals[sk])
 
     def on_save_checkpoint(self, checkpoint):
         for exit_ix in range(len(self.model.multi_exit.exit_block_nums)):
@@ -158,6 +156,9 @@ class OccamTrainer(BaseTrainer):
                 getattr(self, f'ExitGateLoss_{exit_ix}').on_load_checkpoint(checkpoint, exit_ix)
             except:
                 logging.getLogger().error(f"Could not load {f'ExitGateLoss_{exit_ix}'}")
+
+    def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
+        accuracy.update(model_out['E=early, logits'], batch['y'], batch['class_name'], batch['group_name'])
 
 
 class GateWeightedCELoss():
@@ -263,6 +264,3 @@ class ExitGateLoss():
 
     def on_load_checkpoint(self, checkpoint, exit_ix):
         self.item_to_correctness = checkpoint[f'item_to_correctness_{exit_ix}']
-
-    def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
-        accuracy.update(model_out['E=early, logits'], batch['y'], batch['class_name'], batch['group_name'])

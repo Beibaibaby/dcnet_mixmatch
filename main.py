@@ -72,7 +72,8 @@ def exec(cfg: DictConfig) -> None:
                                 limit_val_batches=cfg.trainer.limit_val_batches,
                                 limit_test_batches=cfg.trainer.limit_test_batches,
                                 precision=cfg.trainer.precision,
-                                gradient_clip_val=cfg.trainer.gradient_clip_val)
+                                gradient_clip_val=cfg.trainer.gradient_clip_val,
+                                log_every_n_steps=1)
         pl_trainer.fit(trainer,
                        train_dataloaders=data_loaders['train'],
                        val_dataloaders=list(data_loaders['val'].values()))
