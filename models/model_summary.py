@@ -26,10 +26,13 @@ def count_num_of_layers(model):
 
 
 if __name__ == "__main__":
-    from models.occam_resnet import *
+    # from models.occam_resnet import *
     from models.variable_width_resnet import *
+    from models.occam_resnet_v2 import *
 
-    m = occam_resnet18_img64(1000)
+    m = resnet18(1000)  # 11689512
+    # m = occam_resnet18_v2_ex2(1000) # 20210728
+    m = occam_resnet18_v2_ex2_w46_hid384(1000)  # 11620438
     print(m)
 
     # # https://stackoverflow.com/a/62764464/1122681

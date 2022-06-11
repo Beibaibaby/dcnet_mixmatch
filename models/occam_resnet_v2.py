@@ -60,6 +60,7 @@ class OccamResNetV2(VariableWidthResNet):
             initial_padding=3,
             use_initial_max_pooling=True,
             exit_type=SharedExit,
+            exit_hid_channels=512,
             num_classes=None
     ) -> None:
         super().__init__(block=block,
@@ -79,7 +80,8 @@ class OccamResNetV2(VariableWidthResNet):
                 _layer = _block.conv2
             exit_in_dims += _layer.out_channels
 
-        self.exit = exit_type(in_channels=exit_in_dims, out_channels=num_classes)
+        self.exit = exit_type(in_channels=exit_in_dims, out_channels=num_classes,
+                              hid_channels=exit_hid_channels)
         self.init_weights()
 
     def init_weights(self):
@@ -106,16 +108,22 @@ class OccamResNetV2(VariableWidthResNet):
         return self.exit(x_list)
 
 
-def occam_resnet18_v2(num_classes, width=64, exit_type=SharedExit):
+def occam_resnet18_v2(num_classes, width=64, exit_type=SharedExit, exit_hid_channels=512):
     return OccamResNetV2(block=BasicBlock,
                          layers=[2, 2, 2, 2],
                          width=width,
                          exit_type=exit_type,
-                         num_classes=num_classes)
+                         num_classes=num_classes,
+                         exit_hid_channels=exit_hid_channels)
 
 
 def occam_resnet18_v2_ex2(num_classes):
     return occam_resnet18_v2(num_classes, exit_type=SharedExit2)
+
+
+def occam_resnet18_v2_ex2_w46_hid384(num_classes):
+    return occam_resnet18_v2(num_classes, exit_type=SharedExit2, width=46,
+                             exit_hid_channels=384)
 
 
 def occam_resnet18_v2_ex3(num_classes):

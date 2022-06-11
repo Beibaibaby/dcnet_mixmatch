@@ -118,13 +118,14 @@ class BaseTrainer(pl.LightningModule):
             if batch_idx == 0:
                 setattr(self, metric_key, SegmentationMetrics())
             gt_masks = batch['mask']
-            torch.set_grad_enabled(True)
             getattr(self, metric_key).update(gt_masks, self.get_class_cams(batch, model_out, cls_type))
-            torch.set_grad_enabled(False)
 
     def get_class_cams(self, batch, model_out, class_type):
+        torch.set_grad_enabled(True)
         classes = self.get_classes(batch, model_out, class_type)
-        return get_class_cams(batch['x'], self.model, classes)
+        cls_cams = get_class_cams(batch['x'], self.model, classes)
+        torch.set_grad_enabled(False)
+        return cls_cams
 
     def get_classes(self, batch, logits, class_type):
         return batch['y'] if class_type == 'gt' else logits.argmax(dim=-1)
@@ -132,8 +133,9 @@ class BaseTrainer(pl.LightningModule):
     def segmentation_metric_epoch_end(self, split, loader_key):
         # Log segmentation metrics
         for cls_type in ['gt', 'pred']:
+            # metric_key = f'{cls_type}_{split}_{dataloader_key}_segmentation_metrics'
             metric_key = f'{cls_type}_{split}_{loader_key}_segmentation_metrics'
             if hasattr(self, metric_key):
                 seg_metric_vals = getattr(self, metric_key).summary()
                 for sk in seg_metric_vals:
-                    self.log(f"{sk}", seg_metric_vals[sk])
+                    self.log(f"{metric_key} {sk}", seg_metric_vals[sk])
