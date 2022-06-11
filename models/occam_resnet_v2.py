@@ -49,6 +49,21 @@ class SharedExit3(SharedExit):
         super().__init__(in_channels, out_channels, 3, hid_channels, kernel_size, stride)
 
 
+class BlockAttention(nn.Module):
+    def __init__(self, in_channels, num_blocks, hid_channels=16):
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Linear(in_channels, hid_channels),
+            nn.BatchNorm1d(hid_channels),
+            nn.ReLU(),
+            nn.Linear(hid_channels, num_blocks),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.layers(F.adaptive_avg_pool2d(x, 1).squeeze())
+
+
 class OccamResNetV2(VariableWidthResNet):
     def __init__(
             self,
@@ -72,17 +87,23 @@ class OccamResNetV2(VariableWidthResNet):
                          use_initial_max_pooling=use_initial_max_pooling)
         del self.fc
         exit_in_dims = 0
-        for i in range(0, 4):
+        num_blocks = 4
+        for i in range(0, num_blocks):
             _block = getattr(self, f'layer{i + 1}')[-1]
-            if hasattr(_block, 'conv3'):
-                _layer = _block.conv3
-            else:
-                _layer = _block.conv2
-            exit_in_dims += _layer.out_channels
+            exit_in_dims += self._get_block_out_dims(_block)
 
+        self.block_attention = BlockAttention(self._get_block_out_dims(self.layer1[-1]),
+                                              num_blocks - 1)
         self.exit = exit_type(in_channels=exit_in_dims, out_channels=num_classes,
                               hid_channels=exit_hid_channels)
         self.init_weights()
+
+    def _get_block_out_dims(self, block):
+        if hasattr(block, 'conv3'):
+            _layer = block.conv3
+        else:
+            _layer = block.conv2
+        return _layer.out_channels
 
     def init_weights(self):
         for m in self.modules():
@@ -104,8 +125,14 @@ class OccamResNetV2(VariableWidthResNet):
 
         for i in range(0, 4):
             x = getattr(self, f'layer{i + 1}')(x)
+            if i == 0:
+                block_attn = self.block_attention(x)
+            else:
+                x = x * block_attn[:, i - 1].unsqueeze(1).unsqueeze(2).unsqueeze(3)
             x_list.append(x)
-        return self.exit(x_list)
+        out = self.exit(x_list)
+        out['block_attention'] = block_attn
+        return out
 
 
 def occam_resnet18_v2(num_classes, width=64, exit_type=SharedExit, exit_hid_channels=512):

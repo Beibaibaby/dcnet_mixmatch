@@ -5,7 +5,14 @@ from analysis.analyze_segmentation import save_heatmap
 
 class OccamTrainerV2(BaseTrainer):
     def compute_loss(self, outs, y):
-        return F.cross_entropy(outs['logits'].squeeze(), y.squeeze())
+        ce_loss = F.cross_entropy(outs['logits'].squeeze(), y.squeeze())
+        self.log(f'ce_loss', ce_loss)
+
+        block_attn_cfg = self.trainer_cfg.block_attention
+        block_attn_loss = block_attn_cfg.loss_wt * BlockAttentionMarginLoss(block_attn_cfg.margin)(
+            outs['block_attention'])
+        self.log(f'block_attn_loss', block_attn_loss)
+        return ce_loss + block_attn_loss
 
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out['logits'], batch['y'], batch['class_name'], batch['group_name'])
@@ -25,6 +32,17 @@ class OccamTrainerV2(BaseTrainer):
         save_dir = os.path.join(os.getcwd(), f'visualizations_ep{self.current_epoch}_b{batch_idx}')
         gt_mask = None if 'mask' not in batch else batch['mask'][0]
         save_heatmap(batch['x'][0], heat_maps[0], save_dir, heat_map_suffix=heat_map_suffix, gt_mask=gt_mask)
+
+
+class BlockAttentionMarginLoss():
+    def __init__(self, margin):
+        self.margin = margin
+
+    def __call__(self, block_attention):
+        loss = 0
+        for bix in range(block_attention.shape[1] - 1):
+            loss += F.relu(block_attention[:, bix].detach() - block_attention[:, bix + 1] + self.margin)
+        return loss.mean()
 
 # TODO: Favor earlier blocks
 # TODO: Better grounding loss

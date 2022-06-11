@@ -32,7 +32,7 @@ if __name__ == "__main__":
 
     m = resnet18(1000)  # 11689512
     # m = occam_resnet18_v2_ex2(1000) # 20210728
-    m = occam_resnet18_v2_ex2_w46_hid384(1000)  # 11620438
+    m = occam_resnet18_v2_ex2_w46_hid384(1000)  # without block attention: 11620438, with block attention: 11621273
     print(m)
 
     # # https://stackoverflow.com/a/62764464/1122681
