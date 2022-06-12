@@ -3,13 +3,16 @@ from models.variable_width_resnet import VariableWidthResNet, BasicBlock, Bottle
 
 
 class SharedExit(nn.Module):
-    def __init__(self, in_channels, out_channels, resize_to_block, n_layers=2, hid_channels=512, kernel_size=3,
+    def __init__(self, in_channels, out_channels, resize_to_block, num_blocks=4, block_downsample=2, n_layers=1,
+                 hid_channels=128, kernel_size=3,
                  stride=None):
         """
 
-        :param in_channels:
+        :param in_channels: List of in channels
         :param out_channels:
-        :param resize_to_block: All feature maps will be resized to features from this block
+        :param resize_to_block: All feature maps will be resized to maps from this block
+        :param num_blocks: Total # of blocks in the network
+        :param block_downsample: Factor by which maps are downsampled from block i to block i+1
         :param n_layers:
         :param hid_channels:
         :param kernel_size:
@@ -18,12 +21,29 @@ class SharedExit(nn.Module):
         super().__init__()
         if stride is None:
             stride = kernel_size // 2
+        resize_layers = []
+        for block_ix in range(num_blocks):
+            resize_kernel = block_downsample ** (block_ix - resize_to_block)
+            if resize_kernel >= 1:
+                conv = nn.ConvTranspose2d(in_channels=in_channels[block_ix], out_channels=hid_channels,
+                                          kernel_size=resize_kernel, stride=resize_kernel,
+                                          padding=0)
+            else:
+                conv = nn.Conv2d(in_channels=in_channels[block_ix], out_channels=hid_channels,
+                                 kernel_size=int(1 / resize_kernel),
+                                 stride=int(1 / resize_kernel), padding=0)
+            resize_layers.append(
+                nn.Sequential(conv,
+                              nn.BatchNorm2d(hid_channels),
+                              nn.ReLU()))
+        self.resize_layers = nn.ModuleList(resize_layers)
+
         layers = []
-        _in_ch = in_channels
         for layer_ix in range(n_layers):
-            _out_ch = out_channels if layer_ix == n_layers - 1 else hid_channels
-            layers.append(nn.Conv2d(in_channels=_in_ch, out_channels=_out_ch, kernel_size=kernel_size,
-                                    padding=kernel_size // 2, stride=stride))
+            _out_ch = out_channels if layer_ix == n_layers - 1 else hid_channels * num_blocks
+            layers.append(
+                nn.Conv2d(in_channels=hid_channels * num_blocks, out_channels=_out_ch, kernel_size=kernel_size,
+                          padding=kernel_size // 2, stride=stride))
             if layer_ix < n_layers - 1:
                 layers.append(nn.BatchNorm2d(_out_ch))
             _in_ch = _out_ch
@@ -37,13 +57,11 @@ class SharedExit(nn.Module):
         Shape of i-th feature map: B x F_i x H_i x W_i
         :return:
         """
-        # Get the smallest dims
-        # h, w = min([x.shape[2] for x in x_list]), min([x.shape[3] for x in x_list])
-        resize_h, resize_w = x_list[self.resize_to_block].shape[2], x_list[self.resize_to_block].shape[3]
+        # Resize using ConvTranspose2d
+        resized_list = [self.resize_layers[block_ix](x_list[block_ix]) for block_ix in range(len(x_list))]
 
         # Resize to the reference dims
-        combo = torch.cat([x if x.shape[2] == resize_h and x.shape[3] == resize_w else
-                           interpolate(x, resize_h, resize_w) for x in x_list], dim=1)
+        combo = torch.cat(resized_list, dim=1)
 
         # Get the class activation maps
         cams = self.cam(combo)
@@ -51,11 +69,6 @@ class SharedExit(nn.Module):
             'cams': cams,
             'logits': F.adaptive_avg_pool2d(cams, (1)).squeeze()
         }
-
-
-class SharedExit2(SharedExit):
-    def __init__(self, in_channels, out_channels, resize_to_block, hid_channels=512, kernel_size=3, stride=None):
-        super().__init__(in_channels, out_channels, resize_to_block, 2, hid_channels, kernel_size, stride)
 
 
 class BlockAttention(nn.Module):
@@ -98,11 +111,11 @@ class OccamResNetV2(VariableWidthResNet):
                          use_initial_max_pooling=use_initial_max_pooling)
         self.ref_exit_size = resize_to_block
         del self.fc
-        exit_in_dims = 0
+        exit_in_dims = []
         num_blocks = 4
         for i in range(0, num_blocks):
             _block = getattr(self, f'layer{i + 1}')[-1]
-            exit_in_dims += self._get_block_out_dims(_block)
+            exit_in_dims.append(self._get_block_out_dims(_block))
         self.use_block_attention = use_block_attention
         if self.use_block_attention:
             self.block_attention = BlockAttention(self._get_block_out_dims(self.layer1[-1]),
@@ -151,8 +164,8 @@ class OccamResNetV2(VariableWidthResNet):
         return out
 
 
-def occam_resnet18_v2(num_classes, width=46, exit_type=SharedExit, exit_hid_channels=384,
-                      resize_to_block=3):
+def occam_resnet18_v2_trans(num_classes, width=46, exit_type=SharedExit, exit_hid_channels=96,
+                            resize_to_block=3):
     return OccamResNetV2(block=BasicBlock,
                          layers=[2, 2, 2, 2],
                          width=width,
@@ -162,29 +175,16 @@ def occam_resnet18_v2(num_classes, width=46, exit_type=SharedExit, exit_hid_chan
                          resize_to_block=resize_to_block)
 
 
-# def occam_resnet18_v2_ex2(num_classes):
-#     return occam_resnet18_v2(num_classes, exit_type=SharedExit2)
+def occam_resnet18_v2_trans_resize_to_b1(num_classes):
+    return occam_resnet18_v2_trans(num_classes, resize_to_block=1)
 
 
-def occam_resnet18_v2_ex2(num_classes):
-    return occam_resnet18_v2(num_classes, exit_type=SharedExit2, width=46,
-                             exit_hid_channels=384)
-
-
-def occam_resnet18_v2_ex2_resize_to_block2(num_classes):
-    return occam_resnet18_v2(num_classes, exit_type=SharedExit2, width=46, exit_hid_channels=384, resize_to_block=2)
-
-
-def occam_resnet18_v2_ex2_resize_to_block1(num_classes):
-    return occam_resnet18_v2(num_classes, exit_type=SharedExit2, width=46, exit_hid_channels=384, resize_to_block=1)
-
-
-# def occam_resnet18_v2_ex3(num_classes):
-#     return occam_resnet18_v2(num_classes, exit_type=SharedExit3)
+def occam_resnet18_v2_trans_resize_to_b2(num_classes):
+    return occam_resnet18_v2_trans(num_classes, resize_to_block=2)
 
 
 if __name__ == "__main__":
-    m = occam_resnet18_v2(20)
+    m = occam_resnet18_v2_trans_resize_to_b1(20)
     print(m)
     x = torch.rand((5, 3, 224, 224))
     out = m(x)
