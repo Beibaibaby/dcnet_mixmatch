@@ -26,13 +26,14 @@ class OccamTrainerV2(BaseTrainer):
 
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         super().segmentation_metric_step(batch, batch_idx, model_out, split, dataloader_idx=dataloader_idx)
+        loader_key = self.get_loader_name(split, dataloader_idx)
         for cls_type in ['gt', 'pred']:
             cams = get_class_cams_for_occam_nets(model_out['cams'],
                                                  self.get_classes(batch, model_out['logits'], cls_type))
-            self.save_heatmaps(batch, batch_idx, cams, heat_map_suffix=f'_{cls_type}')
+            self.save_heatmaps(batch, batch_idx, cams, dir=f'{split}_{loader_key}', heat_map_suffix=f'_{cls_type}')
 
-    def save_heatmaps(self, batch, batch_idx, heat_maps, heat_map_suffix=''):
-        save_dir = os.path.join(os.getcwd(), f'visualizations_ep{self.current_epoch}_b{batch_idx}')
+    def save_heatmaps(self, batch, batch_idx, heat_maps, dir, heat_map_suffix=''):
+        save_dir = os.path.join(os.getcwd(), f'viz_{dir}/ep{self.current_epoch}/b{batch_idx}')
         gt_mask = None if 'mask' not in batch else batch['mask'][0]
         save_heatmap(batch['x'][0], heat_maps[0], save_dir, heat_map_suffix=heat_map_suffix, gt_mask=gt_mask)
 
