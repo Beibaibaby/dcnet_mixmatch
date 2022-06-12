@@ -61,7 +61,7 @@ class BaseTrainer(pl.LightningModule):
         loader_keys = self.get_dataloader_keys(split)
         for loader_key in loader_keys:
             accuracy = getattr(self, f'{split}_{loader_key}_accuracy')
-            self.log(f"{loader_key}_accuracy", accuracy.summary())
+            self.log(f"{split} {loader_key}_accuracy", accuracy.summary())
             detailed = accuracy.detailed()
             save_dir = os.path.join(os.getcwd(), loader_key)
             os.makedirs(save_dir, exist_ok=True)
