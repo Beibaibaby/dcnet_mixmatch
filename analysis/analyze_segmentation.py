@@ -242,18 +242,18 @@ class SegmentationMetrics:
         for iou, conf_matrix, thresh in zip(ious, conf_matrices, thresholds):
             if thresh not in self.thresh_to_metrics:
                 self.thresh_to_metrics[thresh] = {'iou': [],
-                                                  # 'GT=fg,pred=fg': [],
-                                                  # 'GT=bg,pred=bg': [],
-                                                  # 'GT=fg,pred=bg': [],
-                                                  # 'GT=bg,pred=fg': [],
+                                                  'GT=fg,pred=fg': [],
+                                                  'GT=bg,pred=bg': [],
+                                                  'GT=fg,pred=bg': [],
+                                                  'GT=bg,pred=fg': [],
                                                   'total': []}
             self.thresh_to_metrics[thresh]['iou'].append(iou)
 
             # GT: axis=1, pred: axis=0
-            # self.thresh_to_metrics[thresh]['GT=fg,pred=fg'].append(conf_matrix[1][1])
-            # self.thresh_to_metrics[thresh]['GT=bg,pred=bg'].append(conf_matrix[0][0])
-            # self.thresh_to_metrics[thresh]['GT=fg,pred=bg'].append(conf_matrix[0][1])
-            # self.thresh_to_metrics[thresh]['GT=bg,pred=fg'].append(conf_matrix[1][0])
+            self.thresh_to_metrics[thresh]['GT=fg,pred=fg'].append(conf_matrix[1][1])
+            self.thresh_to_metrics[thresh]['GT=bg,pred=bg'].append(conf_matrix[0][0])
+            self.thresh_to_metrics[thresh]['GT=fg,pred=bg'].append(conf_matrix[0][1])
+            self.thresh_to_metrics[thresh]['GT=bg,pred=fg'].append(conf_matrix[1][0])
             self.thresh_to_metrics[thresh]['total'].append(conf_matrix.sum())
         return self.thresh_to_metrics
 
