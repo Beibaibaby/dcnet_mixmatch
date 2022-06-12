@@ -91,7 +91,8 @@ class OccamResNetV2(VariableWidthResNet):
             exit_type=SharedExit,
             exit_hid_channels=512,
             num_classes=None,
-            resize_to_block=3
+            resize_to_block=3,
+            use_block_attention=False
     ) -> None:
         super().__init__(block=block,
                          layers=layers,
@@ -107,9 +108,10 @@ class OccamResNetV2(VariableWidthResNet):
         for i in range(0, num_blocks):
             _block = getattr(self, f'layer{i + 1}')[-1]
             exit_in_dims += self._get_block_out_dims(_block)
-
-        self.block_attention = BlockAttention(self._get_block_out_dims(self.layer1[-1]),
-                                              num_blocks - 1)
+        self.use_block_attention = use_block_attention
+        if self.use_block_attention:
+            self.block_attention = BlockAttention(self._get_block_out_dims(self.layer1[-1]),
+                                                  num_blocks - 1)
         self.exit = exit_type(in_channels=exit_in_dims, out_channels=num_classes,
                               hid_channels=exit_hid_channels,
                               resize_to_block=resize_to_block)
@@ -142,13 +144,15 @@ class OccamResNetV2(VariableWidthResNet):
 
         for i in range(0, 4):
             x = getattr(self, f'layer{i + 1}')(x)
-            if i == 0:
-                block_attn = self.block_attention(x)
-            else:
-                x = x * block_attn[:, i - 1].unsqueeze(1).unsqueeze(2).unsqueeze(3)
+            if self.use_block_attention:
+                if i == 0:
+                    block_attn = self.block_attention(x)
+                else:
+                    x = x * block_attn[:, i - 1].unsqueeze(1).unsqueeze(2).unsqueeze(3)
             x_list.append(x)
         out = self.exit(x_list)
-        out['block_attention'] = block_attn
+        if self.use_block_attention:
+            out['block_attention'] = block_attn
         return out
 
 
