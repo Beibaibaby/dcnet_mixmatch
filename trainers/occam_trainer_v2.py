@@ -7,12 +7,15 @@ class OccamTrainerV2(BaseTrainer):
     def compute_loss(self, outs, y):
         ce_loss = F.cross_entropy(outs['logits'].squeeze(), y.squeeze())
         self.log(f'ce_loss', ce_loss)
+        loss = ce_loss
 
         block_attn_cfg = self.trainer_cfg.block_attention
-        block_attn_loss = block_attn_cfg.loss_wt * BlockAttentionMarginLoss(block_attn_cfg.margin)(
-            outs['block_attention'])
-        self.log(f'block_attn_loss', block_attn_loss)
-        return ce_loss + block_attn_loss
+        if block_attn_cfg.loss_wt > 0:
+            block_attn_loss = block_attn_cfg.loss_wt * BlockAttentionMarginLoss(block_attn_cfg.margin)(
+                outs['block_attention'])
+            self.log(f'block_attn_loss', block_attn_loss)
+            loss += block_attn_loss
+        return loss
 
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out['logits'], batch['y'], batch['class_name'], batch['group_name'])

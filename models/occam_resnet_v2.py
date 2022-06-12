@@ -3,7 +3,18 @@ from models.variable_width_resnet import VariableWidthResNet, BasicBlock, Bottle
 
 
 class SharedExit(nn.Module):
-    def __init__(self, in_channels, out_channels, n_layers=1, hid_channels=512, kernel_size=3, stride=None):
+    def __init__(self, in_channels, out_channels, resize_to_block, n_layers=1, hid_channels=512, kernel_size=3,
+                 stride=None):
+        """
+
+        :param in_channels:
+        :param out_channels:
+        :param resize_to_block: All feature maps will be resized to features from this block
+        :param n_layers:
+        :param hid_channels:
+        :param kernel_size:
+        :param stride:
+        """
         super().__init__()
         if stride is None:
             stride = kernel_size // 2
@@ -17,6 +28,7 @@ class SharedExit(nn.Module):
                 layers.append(nn.BatchNorm2d(_out_ch))
             _in_ch = _out_ch
         self.cam = nn.Sequential(*layers)
+        self.resize_to_block = resize_to_block
 
     def forward(self, x_list):
         """
@@ -26,10 +38,12 @@ class SharedExit(nn.Module):
         :return:
         """
         # Get the smallest dims
-        h, w = min([x.shape[2] for x in x_list]), min([x.shape[3] for x in x_list])
+        # h, w = min([x.shape[2] for x in x_list]), min([x.shape[3] for x in x_list])
+        resize_h, resize_w = x_list[self.resize_to_block].shape[2], x_list[self.resize_to_block].shape[3]
 
-        # Resize to the smallest dims
-        combo = torch.cat([x if x.shape[2] == h and x.shape[3] == w else interpolate(x, h, w) for x in x_list], dim=1)
+        # Resize to the reference dims
+        combo = torch.cat([x if x.shape[2] == resize_h and x.shape[3] == resize_w else
+                           interpolate(x, resize_h, resize_w) for x in x_list], dim=1)
 
         # Get the class activation maps
         cams = self.cam(combo)
@@ -40,13 +54,13 @@ class SharedExit(nn.Module):
 
 
 class SharedExit2(SharedExit):
-    def __init__(self, in_channels, out_channels, hid_channels=512, kernel_size=3, stride=None):
-        super().__init__(in_channels, out_channels, 2, hid_channels, kernel_size, stride)
+    def __init__(self, in_channels, out_channels, resize_to_block, hid_channels=512, kernel_size=3, stride=None):
+        super().__init__(in_channels, out_channels, resize_to_block, 2, hid_channels, kernel_size, stride)
 
 
 class SharedExit3(SharedExit):
-    def __init__(self, in_channels, out_channels, hid_channels=512, kernel_size=3, stride=None):
-        super().__init__(in_channels, out_channels, 3, hid_channels, kernel_size, stride)
+    def __init__(self, in_channels, out_channels, resize_to_block, hid_channels=512, kernel_size=3, stride=None):
+        super().__init__(in_channels, out_channels, resize_to_block, 3, hid_channels, kernel_size, stride)
 
 
 class BlockAttention(nn.Module):
@@ -76,7 +90,8 @@ class OccamResNetV2(VariableWidthResNet):
             use_initial_max_pooling=True,
             exit_type=SharedExit,
             exit_hid_channels=512,
-            num_classes=None
+            num_classes=None,
+            resize_to_block=3
     ) -> None:
         super().__init__(block=block,
                          layers=layers,
@@ -85,6 +100,7 @@ class OccamResNetV2(VariableWidthResNet):
                          initial_stride=initial_stride,
                          initial_padding=initial_padding,
                          use_initial_max_pooling=use_initial_max_pooling)
+        self.ref_exit_size = resize_to_block
         del self.fc
         exit_in_dims = 0
         num_blocks = 4
@@ -95,7 +111,8 @@ class OccamResNetV2(VariableWidthResNet):
         self.block_attention = BlockAttention(self._get_block_out_dims(self.layer1[-1]),
                                               num_blocks - 1)
         self.exit = exit_type(in_channels=exit_in_dims, out_channels=num_classes,
-                              hid_channels=exit_hid_channels)
+                              hid_channels=exit_hid_channels,
+                              resize_to_block=resize_to_block)
         self.init_weights()
 
     def _get_block_out_dims(self, block):
@@ -135,26 +152,36 @@ class OccamResNetV2(VariableWidthResNet):
         return out
 
 
-def occam_resnet18_v2(num_classes, width=64, exit_type=SharedExit, exit_hid_channels=512):
+def occam_resnet18_v2(num_classes, width=46, exit_type=SharedExit, exit_hid_channels=384,
+                      resize_to_block=3):
     return OccamResNetV2(block=BasicBlock,
                          layers=[2, 2, 2, 2],
                          width=width,
                          exit_type=exit_type,
                          num_classes=num_classes,
-                         exit_hid_channels=exit_hid_channels)
+                         exit_hid_channels=exit_hid_channels,
+                         resize_to_block=resize_to_block)
+
+
+# def occam_resnet18_v2_ex2(num_classes):
+#     return occam_resnet18_v2(num_classes, exit_type=SharedExit2)
 
 
 def occam_resnet18_v2_ex2(num_classes):
-    return occam_resnet18_v2(num_classes, exit_type=SharedExit2)
-
-
-def occam_resnet18_v2_ex2_w46_hid384(num_classes):
     return occam_resnet18_v2(num_classes, exit_type=SharedExit2, width=46,
                              exit_hid_channels=384)
 
 
-def occam_resnet18_v2_ex3(num_classes):
-    return occam_resnet18_v2(num_classes, exit_type=SharedExit3)
+def occam_resnet18_v2_ex2_resize_to_block2(num_classes):
+    return occam_resnet18_v2(num_classes, exit_type=SharedExit2, width=46, exit_hid_channels=384, resize_to_block=2)
+
+
+def occam_resnet18_v2_ex2_resize_to_block1(num_classes):
+    return occam_resnet18_v2(num_classes, exit_type=SharedExit2, width=46, exit_hid_channels=384, resize_to_block=1)
+
+
+# def occam_resnet18_v2_ex3(num_classes):
+#     return occam_resnet18_v2(num_classes, exit_type=SharedExit3)
 
 
 if __name__ == "__main__":
