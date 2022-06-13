@@ -4,7 +4,7 @@ from models.variable_width_resnet import VariableWidthResNet, BasicBlock, Bottle
 
 class SharedExit(nn.Module):
     def __init__(self, in_channels, out_channels, resize_to_block, n_layers=2, hid_channels=512, kernel_size=3,
-                 stride=None):
+                 stride=None, object_score_block=1):
         """
 
         :param in_channels:
@@ -18,6 +18,8 @@ class SharedExit(nn.Module):
         super().__init__()
         if stride is None:
             stride = kernel_size // 2
+        self.resize_to_block = resize_to_block
+        self.object_score_block = object_score_block
         layers = []
         _in_ch = in_channels
         for layer_ix in range(n_layers):
@@ -28,9 +30,8 @@ class SharedExit(nn.Module):
                 layers.append(nn.BatchNorm2d(_out_ch))
             _in_ch = _out_ch
         self.cam = nn.Sequential(*layers)
-        self.resize_to_block = resize_to_block
 
-    def forward(self, x_list):
+    def forward(self, x_list, y=None):
         """
 
         :param x_list: List of feature maps from different blocks of the network.
@@ -38,7 +39,6 @@ class SharedExit(nn.Module):
         :return:
         """
         # Get the smallest dims
-        # h, w = min([x.shape[2] for x in x_list]), min([x.shape[3] for x in x_list])
         resize_h, resize_w = x_list[self.resize_to_block].shape[2], x_list[self.resize_to_block].shape[3]
 
         # Resize to the reference dims
@@ -47,10 +47,17 @@ class SharedExit(nn.Module):
 
         # Get the class activation maps
         cams = self.cam(combo)
-        return {
+
+        obj = {
             'cams': cams,
             'logits': F.adaptive_avg_pool2d(cams, (1)).squeeze()
         }
+
+        if y is None:
+            y = torch.argmax(obj['logits'], dim=-1)
+
+        obj['object_scores'] = similarity_based_object_scores(cams, y, x_list[self.object_score_block])
+        return obj
 
 
 class SharedExit2(SharedExit):
@@ -73,6 +80,44 @@ class BlockAttention(nn.Module):
         return self.layers(F.adaptive_avg_pool2d(x, 1).squeeze())
 
 
+def cosine_similarity(tensor1, tensor2):
+    """
+    Measures similarity between each cell in tensor1 with every other cell of the same sample in tensor2
+    :param tensor1: B x D x c1
+    :param tensor2: B x D x c2
+    :return: B x c1 x c2
+    """
+    assert tensor1.shape[1] == tensor2.shape[1]
+    return F.normalize(tensor1, dim=1).permute(0, 2, 1) @ F.normalize(tensor2, dim=1)
+
+
+def similarity_based_object_scores(cams, classes, hid_feats, threshold='mean'):
+    """
+
+    :param cams: B x C x H_c x W_c
+    :param classes: B
+    :param hid_feats: B x D x H_f x W_f
+    :return:
+    """
+    B, C, H_c, W_c = cams.shape
+    _, D, H_f, W_f = hid_feats.shape
+    if H_c != H_f or W_c != W_f:
+        hid_feats = interpolate(hid_feats, H_c, W_c)
+    flat_feats = hid_feats.reshape(B, D, H_c * W_c)
+    sim_map = cosine_similarity(flat_feats, flat_feats)  # B x H_c W_c x H_c W_c
+
+    # Get CAMs corresponding to given classes
+    class_cams = get_class_cams_for_occam_nets(cams, classes).reshape(B, H_c * W_c)
+    threshold = class_cams.mean(dim=1, keepdims=True)
+
+    # Threshold the CAMs to obtain the seeds
+    obj_seeds = torch.where(class_cams >= threshold, torch.ones_like(class_cams), torch.zeros_like(class_cams)) \
+        .unsqueeze(2).repeat(1, 1, H_c * W_c)
+
+    # For each location, get average similarity wrt seed locations
+    return (sim_map * obj_seeds).mean(dim=2).reshape(B, H_c, W_c)
+
+
 class OccamResNetV2(VariableWidthResNet):
     def __init__(
             self,
@@ -87,6 +132,7 @@ class OccamResNetV2(VariableWidthResNet):
             exit_hid_channels=512,
             num_classes=None,
             resize_to_block=3,
+            object_score_block=0,
             use_block_attention=False
     ) -> None:
         super().__init__(block=block,
@@ -109,7 +155,8 @@ class OccamResNetV2(VariableWidthResNet):
                                                   num_blocks - 1)
         self.exit = exit_type(in_channels=exit_in_dims, out_channels=num_classes,
                               hid_channels=exit_hid_channels,
-                              resize_to_block=resize_to_block)
+                              resize_to_block=resize_to_block,
+                              object_score_block=object_score_block)
         self.init_weights()
 
     def _get_block_out_dims(self, block):
@@ -145,21 +192,26 @@ class OccamResNetV2(VariableWidthResNet):
                 else:
                     x = x * block_attn[:, i - 1].unsqueeze(1).unsqueeze(2).unsqueeze(3)
             x_list.append(x)
-        out = self.exit(x_list)
+        out = self.exit(x_list, y)
         if self.use_block_attention:
             out['block_attention'] = block_attn
         return out
 
 
 def occam_resnet18_v2(num_classes, width=46, exit_type=SharedExit, exit_hid_channels=384,
-                      resize_to_block=3):
+                      resize_to_block=3, object_score_block=0):
     return OccamResNetV2(block=BasicBlock,
                          layers=[2, 2, 2, 2],
                          width=width,
                          exit_type=exit_type,
                          num_classes=num_classes,
                          exit_hid_channels=exit_hid_channels,
-                         resize_to_block=resize_to_block)
+                         resize_to_block=resize_to_block,
+                         object_score_block=object_score_block)
+
+
+def occam_resnet18_v2_w64(num_classes):
+    return occam_resnet18_v2(num_classes, exit_hid_channels=464)
 
 
 # def occam_resnet18_v2_ex2(num_classes):
@@ -187,7 +239,8 @@ if __name__ == "__main__":
     m = occam_resnet18_v2(20)
     print(m)
     x = torch.rand((5, 3, 224, 224))
-    out = m(x)
+    y = torch.LongTensor([0, 2, 2, 1, 2])
+    out = m(x, y)
     print(out.keys())
     for k in out:
         print(f"k={k} {out[k].shape}")

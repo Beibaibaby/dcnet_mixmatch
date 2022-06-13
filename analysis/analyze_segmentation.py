@@ -215,13 +215,26 @@ def main_calc_segmentation_metrics(config, data_loader):
 #     print(json.dumps(exit_to_metrics, indent=4))
 #     with open(os.path.join(save_dir, 'segmentation.json'), 'w') as f:
 #         json.dump(exit_to_metrics, f, indent=4)
+def normalize(tensor, eps=1e-5):
+    """
+
+    :param tensor:
+    :param eps:
+    :return:
+    """
+    assert len(tensor.shape) == 3
+    maxes, mins = torch.max(tensor.reshape(len(tensor), -1), dim=1)[0].detach(), \
+                  torch.min(tensor.reshape(len(tensor), -1), dim=1)[0].detach()
+    normalized = (tensor - mins.unsqueeze(1).unsqueeze(2)) / (
+            maxes.unsqueeze(1).unsqueeze(2) - mins.unsqueeze(1).unsqueeze(2) + eps)
+    return normalized
 
 
 class SegmentationMetrics:
     def __init__(self):
         self.thresh_to_metrics = {}
 
-    def update(self, gt_masks, pred_masks, h=None, w=None):
+    def update(self, gt_masks, pred_masks, h=None, w=None, should_normalize=True):
         """
         Computes iou, fg vs bg confusions and total pixels at different thresholds
 
@@ -231,6 +244,8 @@ class SegmentationMetrics:
         """
         if len(gt_masks.shape) == 4:
             gt_masks = gt_masks.mean(dim=1)
+        if should_normalize:
+            pred_masks = normalize(pred_masks)
 
         B, H_g, W_g = gt_masks.shape
         _, H_p, W_p = pred_masks.shape

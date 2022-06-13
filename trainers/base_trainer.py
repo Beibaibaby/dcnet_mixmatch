@@ -25,12 +25,12 @@ class BaseTrainer(pl.LightningModule):
         self.model = model_factory.build_model(self.config.model)
         print(self.model)
 
-    def forward(self, x):
+    def forward(self, x, batch=None):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop. It is independent of forward
-        logits = self(batch['x'])
+        logits = self(batch['x'], batch)
         loss = self.compute_loss(logits, batch['y'])
         self.log('loss', loss, on_epoch=True, batch_size=self.config.dataset.batch_size)
         return loss
@@ -43,7 +43,7 @@ class BaseTrainer(pl.LightningModule):
 
     def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_out=None):
         if model_out is None:
-            model_out = self(batch['x'])
+            model_out = self(batch['x'], batch)
         if batch_idx == 0:
             accuracy = Accuracy()
             setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy', accuracy)
@@ -112,9 +112,9 @@ class BaseTrainer(pl.LightningModule):
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         if 'mask' not in batch:
             return
-        dataloader_key = self.get_loader_name(split, dataloader_idx)
+        loader_key = self.get_loader_name(split, dataloader_idx)
         for cls_type in ['gt', 'pred']:  # Save segmentation metrics wrt GT vs predicted classes
-            metric_key = f'{cls_type}_{split}_{dataloader_key}_segmentation_metrics'
+            metric_key = f'{cls_type}_{split}_{loader_key}_segmentation_metrics'
             if batch_idx == 0:
                 setattr(self, metric_key, SegmentationMetrics())
             gt_masks = batch['mask']

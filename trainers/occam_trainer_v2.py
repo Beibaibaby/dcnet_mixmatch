@@ -1,9 +1,13 @@
 from trainers.base_trainer import BaseTrainer
 from utils.cam_utils import *
-from analysis.analyze_segmentation import save_heatmap
+from analysis.analyze_segmentation import save_heatmap, SegmentationMetrics
 
 
 class OccamTrainerV2(BaseTrainer):
+
+    def forward(self, x, batch=None):
+        return self.model(x, batch['y'])
+
     def compute_loss(self, outs, y):
         ce_loss = F.cross_entropy(outs['logits'].squeeze(), y.squeeze())
         self.log(f'ce_loss', ce_loss)
@@ -31,6 +35,24 @@ class OccamTrainerV2(BaseTrainer):
             cams = get_class_cams_for_occam_nets(model_out['cams'],
                                                  self.get_classes(batch, model_out['logits'], cls_type))
             self.save_heatmaps(batch, batch_idx, cams, dir=f'{split}_{loader_key}', heat_map_suffix=f'_{cls_type}')
+
+        # Log metrics wrt similarity map
+        if 'mask' in batch:
+            metric_key = f'obj_mask_{split}_{loader_key}_segmentation_metrics'
+            if batch_idx == 0:
+                setattr(self, metric_key, SegmentationMetrics())
+            gt_masks = batch['mask']
+            getattr(self, metric_key).update(gt_masks, model_out['object_scores'])
+            self.save_heatmaps(batch, batch_idx, model_out['object_scores'], dir=f'{split}_{loader_key}',
+                               heat_map_suffix='_object_scores')
+
+    def segmentation_metric_epoch_end(self, split, loader_key):
+        super().segmentation_metric_epoch_end(split, loader_key)
+        metric_key = f'obj_mask_{split}_{loader_key}_segmentation_metrics'
+        if hasattr(self, metric_key):
+            seg_metric_vals = getattr(self, metric_key).summary()
+            for sk in seg_metric_vals:
+                self.log(f"{metric_key} {sk}", seg_metric_vals[sk])
 
     def save_heatmaps(self, batch, batch_idx, heat_maps, dir, heat_map_suffix=''):
         save_dir = os.path.join(os.getcwd(), f'viz_{dir}/ep{self.current_epoch}/b{batch_idx}')
