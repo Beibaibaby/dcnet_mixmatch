@@ -9,7 +9,7 @@ subset_percent=8
 precision=16
 
 block_attn_wt=0
-for model in occam_resnet18_v2; do
+for model in occam_resnet18_v2_nlayers_1; do
   CUDA_VISIBLE_DEVICES=${GPU} python main.py \
   model.name=${model} \
   trainer=occam_trainer_v2 \

@@ -133,7 +133,8 @@ class OccamResNetV2(VariableWidthResNet):
             num_classes=None,
             resize_to_block=3,
             object_score_block=0,
-            use_block_attention=False
+            use_block_attention=False,
+            exit_layers=2
     ) -> None:
         super().__init__(block=block,
                          layers=layers,
@@ -156,7 +157,8 @@ class OccamResNetV2(VariableWidthResNet):
         self.exit = exit_type(in_channels=exit_in_dims, out_channels=num_classes,
                               hid_channels=exit_hid_channels,
                               resize_to_block=resize_to_block,
-                              object_score_block=object_score_block)
+                              object_score_block=object_score_block,
+                              n_layers=exit_layers)
         self.init_weights()
 
     def _get_block_out_dims(self, block):
@@ -208,6 +210,10 @@ def occam_resnet18_v2(num_classes, width=46, exit_type=SharedExit, exit_hid_chan
                          exit_hid_channels=exit_hid_channels,
                          resize_to_block=resize_to_block,
                          object_score_block=object_score_block)
+
+
+def occam_resnet18_v2_nlayers_1(num_classes):
+    return OccamResNetV2(num_classes=num_classes, exit_layers=1)
 
 
 def occam_resnet18_v2_w64(num_classes):
