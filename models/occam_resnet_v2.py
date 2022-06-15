@@ -3,8 +3,8 @@ from models.variable_width_resnet import VariableWidthResNet, BasicBlock, Bottle
 
 
 class SharedExit(nn.Module):
-    def __init__(self, in_channels, out_channels, resize_to_block, n_layers=2, hid_channels=512, kernel_size=3,
-                 stride=None, object_score_block=1, threshold='mean', threshold_coeff=1):
+    def __init__(self, in_channels, out_channels, resize_to_block=-1, n_layers=2, hid_channels=512, kernel_size=3,
+                 stride=None, object_score_block=-1, threshold='mean', threshold_coeff=1):
         """
 
         :param in_channels:
@@ -64,7 +64,7 @@ class SharedExit(nn.Module):
 
 
 class SharedExit2(SharedExit):
-    def __init__(self, in_channels, out_channels, resize_to_block, hid_channels=512, kernel_size=3, stride=None):
+    def __init__(self, in_channels, out_channels, resize_to_block=-1, hid_channels=512, kernel_size=3, stride=None):
         super().__init__(in_channels, out_channels, resize_to_block, 2, hid_channels, kernel_size, stride)
 
 
@@ -160,10 +160,11 @@ class OccamResNetV2(VariableWidthResNet):
             exit_type=SharedExit,
             exit_hid_channels=512,
             num_classes=None,
-            resize_to_block=3,
+            resize_to_block=-1,
             object_score_block=0,
             use_block_attention=False,
-            exit_layers=2,
+            exit_depth=2,
+            exit_from=[0, 1, 2, 3],
             threshold='mean', threshold_coeff=1
     ) -> None:
         super().__init__(block=block,
@@ -177,9 +178,11 @@ class OccamResNetV2(VariableWidthResNet):
         del self.fc
         exit_in_dims = 0
         num_blocks = 4
+        self.exit_from = exit_from
         for i in range(0, num_blocks):
-            _block = getattr(self, f'layer{i + 1}')[-1]
-            exit_in_dims += self._get_block_out_dims(_block)
+            if i in exit_from:
+                _block = getattr(self, f'layer{i + 1}')[-1]
+                exit_in_dims += self._get_block_out_dims(_block)
         self.use_block_attention = use_block_attention
         if self.use_block_attention:
             self.block_attention = BlockAttention(self._get_block_out_dims(self.layer1[-1]),
@@ -188,7 +191,7 @@ class OccamResNetV2(VariableWidthResNet):
                               hid_channels=exit_hid_channels,
                               resize_to_block=resize_to_block,
                               object_score_block=object_score_block,
-                              n_layers=exit_layers,
+                              n_layers=exit_depth,
                               threshold=threshold, threshold_coeff=threshold_coeff)
         self.init_weights()
 
@@ -224,7 +227,8 @@ class OccamResNetV2(VariableWidthResNet):
                     block_attn = self.block_attention(x)
                 else:
                     x = x * block_attn[:, i - 1].unsqueeze(1).unsqueeze(2).unsqueeze(3)
-            x_list.append(x)
+            if i in self.exit_from:
+                x_list.append(x)
         out = self.exit(x_list, y)
         if self.use_block_attention:
             out['block_attention'] = block_attn
@@ -232,8 +236,8 @@ class OccamResNetV2(VariableWidthResNet):
 
 
 def occam_resnet18_v2(num_classes, width=46, exit_type=SharedExit, exit_hid_channels=384,
-                      resize_to_block=3, object_score_block=3, threshold='mean', threshold_coeff=1,
-                      exit_layers=2):
+                      resize_to_block=-1, object_score_block=-1, threshold='mean', threshold_coeff=1,
+                      exit_depth=2, exit_from=[0, 1, 2, 3]):
     return OccamResNetV2(block=BasicBlock,
                          layers=[2, 2, 2, 2],
                          width=width,
@@ -243,27 +247,37 @@ def occam_resnet18_v2(num_classes, width=46, exit_type=SharedExit, exit_hid_chan
                          resize_to_block=resize_to_block,
                          object_score_block=object_score_block,
                          threshold=threshold, threshold_coeff=threshold_coeff,
-                         exit_layers=exit_layers)
+                         exit_depth=exit_depth,
+                         exit_from=exit_from)
 
 
 def occam_resnet18_v2_nlayers_1(num_classes):
-    return occam_resnet18_v2(num_classes=num_classes, exit_layers=1)
+    return occam_resnet18_v2(num_classes=num_classes, exit_depth=1)
 
 
-def occam_resnet18_v2_obj_score0(num_classes, threshold_coeff):
-    return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=0)
+def occam_resnet18_exit_from_3(num_classes):
+    return occam_resnet18_v2(num_classes=num_classes, exit_from=[3])
 
 
-def occam_resnet18_v2_obj_score1(num_classes, threshold_coeff):
-    return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=1)
+def occam_resnet18_exit_from_2(num_classes):
+    return occam_resnet18_v2(num_classes=num_classes, exit_from=[2])
 
 
-def occam_resnet18_v2_obj_score2(num_classes, threshold_coeff):
-    return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=2)
-
-
-def occam_resnet18_v2_obj_score3(num_classes, threshold_coeff):
-    return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=3)
+#
+# def occam_resnet18_v2_obj_score0(num_classes, threshold_coeff):
+#     return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=0)
+#
+#
+# def occam_resnet18_v2_obj_score1(num_classes, threshold_coeff):
+#     return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=1)
+#
+#
+# def occam_resnet18_v2_obj_score2(num_classes, threshold_coeff):
+#     return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=2)
+#
+#
+# def occam_resnet18_v2_obj_score3(num_classes, threshold_coeff):
+#     return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=3)
 
 
 if __name__ == "__main__":
