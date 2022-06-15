@@ -9,16 +9,18 @@ subset_percent=8
 precision=16
 
 block_attn_wt=0
-for model in occam_resnet18_v2_nlayers_1; do
+cam_supp_wt=1
+for model in occam_resnet18_v2; do
   CUDA_VISIBLE_DEVICES=${GPU} python main.py \
   model.name=${model} \
   trainer=occam_trainer_v2 \
   trainer.precision=${precision} \
   trainer.block_attention.loss_wt=${block_attn_wt} \
+  trainer.cam_suppression_loss_wt=${cam_supp_wt} \
   dataset=${dataset} \
   dataset.subset_percent=${subset_percent} \
   optimizer=${optim} \
-  expt_suffix=subset_${subset_percent}_prec_${precision}_block_attn_${block_attn_wt}
+  expt_suffix=subset_${subset_percent}_prec_${precision}_block_attn_${block_attn_wt}_norm_cam_supp_wt_${cam_supp_wt}
 done
 
 # \

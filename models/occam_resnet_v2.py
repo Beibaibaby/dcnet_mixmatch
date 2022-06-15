@@ -4,7 +4,7 @@ from models.variable_width_resnet import VariableWidthResNet, BasicBlock, Bottle
 
 class SharedExit(nn.Module):
     def __init__(self, in_channels, out_channels, resize_to_block, n_layers=2, hid_channels=512, kernel_size=3,
-                 stride=None, object_score_block=1):
+                 stride=None, object_score_block=1, threshold='mean', threshold_coeff=1):
         """
 
         :param in_channels:
@@ -30,6 +30,8 @@ class SharedExit(nn.Module):
                 layers.append(nn.BatchNorm2d(_out_ch))
             _in_ch = _out_ch
         self.cam = nn.Sequential(*layers)
+        self.threshold = threshold
+        self.threshold_coeff = threshold_coeff
 
     def forward(self, x_list, y=None):
         """
@@ -56,7 +58,8 @@ class SharedExit(nn.Module):
         if y is None:
             y = torch.argmax(obj['logits'], dim=-1)
 
-        obj['object_scores'] = similarity_based_object_scores(cams, y, x_list[self.object_score_block])
+        obj['object_scores'] = similarity_based_object_scores(cams, y, x_list[self.object_score_block],
+                                                              self.threshold, self.threshold_coeff)
         return obj
 
 
@@ -91,12 +94,40 @@ def cosine_similarity(tensor1, tensor2):
     return F.normalize(tensor1, dim=1).permute(0, 2, 1) @ F.normalize(tensor2, dim=1)
 
 
-def similarity_based_object_scores(cams, classes, hid_feats, threshold='mean'):
+# def similarity_based_object_scores(cams, classes, hid_feats, threshold='mean', threshold_coeff=1):
+#     """
+#
+#     :param cams: B x C x H_c x W_c
+#     :param classes: B
+#     :param hid_feats: B x D x H_f x W_f
+#     :param threshold: 'mean' --> regions scoring >= mean CAM score are considered to be objects. If an int (k) is provided, then top-k regions are considered to be the objects
+#     :return:
+#     """
+#     B, C, H_c, W_c = cams.shape
+#     _, D, H_f, W_f = hid_feats.shape
+#     H_ref, W_ref = H_f, W_f
+#     if H_c != H_f or W_c != W_f:
+#         cams = interpolate(cams, H_ref, W_ref)
+#     flat_feats = hid_feats.reshape(B, D, H_ref * W_ref)
+#     sim_map = cosine_similarity(flat_feats, flat_feats)  # B x H_c W_c x H_c W_c
+#
+#     # Get CAMs corresponding to given classes
+#     class_cams = get_class_cams_for_occam_nets(cams, classes).reshape(B, H_ref * W_ref)
+#     if threshold == 'mean':
+#         _threshold = threshold_coeff * class_cams.mean(dim=1, keepdims=True)
+#         # Threshold the CAMs to obtain the seeds
+#         obj_seeds = torch.where(class_cams >= _threshold, torch.ones_like(class_cams), torch.zeros_like(class_cams))
+#     obj_seeds = obj_seeds.unsqueeze(2).repeat(1, 1, H_ref * W_ref)
+#     return (sim_map * obj_seeds).mean(dim=1).reshape(B, H_ref, W_ref)
+
+
+def similarity_based_object_scores(cams, classes, hid_feats, threshold='mean', threshold_coeff=1):
     """
 
     :param cams: B x C x H_c x W_c
     :param classes: B
     :param hid_feats: B x D x H_f x W_f
+    :param threshold: 'mean' --> regions scoring >= mean CAM score are considered to be objects. If an int (k) is provided, then top-k regions are considered to be the objects
     :return:
     """
     B, C, H_c, W_c = cams.shape
@@ -108,14 +139,12 @@ def similarity_based_object_scores(cams, classes, hid_feats, threshold='mean'):
 
     # Get CAMs corresponding to given classes
     class_cams = get_class_cams_for_occam_nets(cams, classes).reshape(B, H_c * W_c)
-    threshold = class_cams.mean(dim=1, keepdims=True)
-
-    # Threshold the CAMs to obtain the seeds
-    obj_seeds = torch.where(class_cams >= threshold, torch.ones_like(class_cams), torch.zeros_like(class_cams)) \
-        .unsqueeze(2).repeat(1, 1, H_c * W_c)
-
-    # For each location, get average similarity wrt seed locations
-    return (sim_map * obj_seeds).mean(dim=2).reshape(B, H_c, W_c)
+    if threshold == 'mean':
+        _threshold = threshold_coeff * class_cams.mean(dim=1, keepdims=True)
+        # Threshold the CAMs to obtain the seeds
+        obj_seeds = torch.where(class_cams >= _threshold, torch.ones_like(class_cams), torch.zeros_like(class_cams))
+    obj_seeds = obj_seeds.unsqueeze(2).repeat(1, 1, H_c * W_c)
+    return (sim_map * obj_seeds).mean(dim=1).reshape(B, H_c, W_c)
 
 
 class OccamResNetV2(VariableWidthResNet):
@@ -134,7 +163,8 @@ class OccamResNetV2(VariableWidthResNet):
             resize_to_block=3,
             object_score_block=0,
             use_block_attention=False,
-            exit_layers=2
+            exit_layers=2,
+            threshold='mean', threshold_coeff=1
     ) -> None:
         super().__init__(block=block,
                          layers=layers,
@@ -158,7 +188,8 @@ class OccamResNetV2(VariableWidthResNet):
                               hid_channels=exit_hid_channels,
                               resize_to_block=resize_to_block,
                               object_score_block=object_score_block,
-                              n_layers=exit_layers)
+                              n_layers=exit_layers,
+                              threshold=threshold, threshold_coeff=threshold_coeff)
         self.init_weights()
 
     def _get_block_out_dims(self, block):
@@ -201,7 +232,8 @@ class OccamResNetV2(VariableWidthResNet):
 
 
 def occam_resnet18_v2(num_classes, width=46, exit_type=SharedExit, exit_hid_channels=384,
-                      resize_to_block=3, object_score_block=0):
+                      resize_to_block=3, object_score_block=3, threshold='mean', threshold_coeff=1,
+                      exit_layers=2):
     return OccamResNetV2(block=BasicBlock,
                          layers=[2, 2, 2, 2],
                          width=width,
@@ -209,36 +241,29 @@ def occam_resnet18_v2(num_classes, width=46, exit_type=SharedExit, exit_hid_chan
                          num_classes=num_classes,
                          exit_hid_channels=exit_hid_channels,
                          resize_to_block=resize_to_block,
-                         object_score_block=object_score_block)
+                         object_score_block=object_score_block,
+                         threshold=threshold, threshold_coeff=threshold_coeff,
+                         exit_layers=exit_layers)
 
 
 def occam_resnet18_v2_nlayers_1(num_classes):
-    return OccamResNetV2(num_classes=num_classes, exit_layers=1)
+    return occam_resnet18_v2(num_classes=num_classes, exit_layers=1)
 
 
-def occam_resnet18_v2_w64(num_classes):
-    return occam_resnet18_v2(num_classes, exit_hid_channels=464)
+def occam_resnet18_v2_obj_score0(num_classes, threshold_coeff):
+    return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=0)
 
 
-# def occam_resnet18_v2_ex2(num_classes):
-#     return occam_resnet18_v2(num_classes, exit_type=SharedExit2)
+def occam_resnet18_v2_obj_score1(num_classes, threshold_coeff):
+    return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=1)
 
 
-def occam_resnet18_v2_ex2(num_classes):
-    return occam_resnet18_v2(num_classes, exit_type=SharedExit2, width=46,
-                             exit_hid_channels=384)
+def occam_resnet18_v2_obj_score2(num_classes, threshold_coeff):
+    return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=2)
 
 
-def occam_resnet18_v2_ex2_resize_to_block2(num_classes):
-    return occam_resnet18_v2(num_classes, exit_type=SharedExit2, width=46, exit_hid_channels=384, resize_to_block=2)
-
-
-def occam_resnet18_v2_ex2_resize_to_block1(num_classes):
-    return occam_resnet18_v2(num_classes, exit_type=SharedExit2, width=46, exit_hid_channels=384, resize_to_block=1)
-
-
-# def occam_resnet18_v2_ex3(num_classes):
-#     return occam_resnet18_v2(num_classes, exit_type=SharedExit3)
+def occam_resnet18_v2_obj_score3(num_classes, threshold_coeff):
+    return occam_resnet18_v2(num_classes, threshold_coeff=threshold_coeff, object_score_block=3)
 
 
 if __name__ == "__main__":

@@ -1,21 +1,4 @@
 name: null
 pretrained: false
 num_classes: null
-device: null
-temperatures: null # List of temperatures (ordered by exit number, ascending order)
-#dropout: null
-
-# specific to occam resnet
-pca_config:
-  file: null
-  num_components: null
-ema_decay: null
-input_dropout: null
-use_data_parallel: False
-#in_dims: null
-#tau: null
-#filter_l1_decay: null
-#early_detach: False # If set to True, then subsequent exits cannot back prop to earlier layers
-#freeze_batch_norm: False
-#exit_layers: null
-#exit_layer: null
+threshold_coeff: 1.0

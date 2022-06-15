@@ -171,8 +171,16 @@ def occam_resnet18_v2_same_dim(num_classes, width=46, exit_type=SharedExit, exit
                          resize_to_block=resize_to_block)
 
 
+def occam_resnet18_v2_same_dim96(num_classes):
+    return occam_resnet18_v2_same_dim(num_classes, exit_hid_channels=96)
+
+
+def occam_resnet18_v2_same_dim192(num_classes):
+    return occam_resnet18_v2_same_dim(num_classes, exit_hid_channels=192)
+
+
 if __name__ == "__main__":
-    m = occam_resnet18_v2_same_dim(20)
+    m = occam_resnet18_v2_same_dim96(20)
     print(m)
     x = torch.rand((5, 3, 224, 224))
     out = m(x)

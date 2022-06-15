@@ -4,3 +4,4 @@ name: OccamTrainerV2
 block_attention:
   loss_wt: 0.1
   margin: 0.2
+cam_suppression_loss_wt: 0.1

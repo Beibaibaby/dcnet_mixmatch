@@ -19,6 +19,11 @@ class OccamTrainerV2(BaseTrainer):
                 outs['block_attention'])
             self.log(f'block_attn_loss', block_attn_loss)
             loss += block_attn_loss
+
+        if self.trainer_cfg.cam_suppression_loss_wt != 0:
+            cam_loss = CAMSuppressionLoss()(outs['cams'], y) * self.trainer_cfg.cam_suppression_loss_wt
+            self.log('cam_loss', cam_loss)
+            loss += cam_loss
         return loss
 
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
@@ -37,7 +42,7 @@ class OccamTrainerV2(BaseTrainer):
             self.save_heatmaps(batch, batch_idx, cams, dir=f'{split}_{loader_key}', heat_map_suffix=f'_{cls_type}')
 
         # Log metrics wrt similarity map
-        if 'mask' in batch:
+        if 'mask' in batch and 'object_scores' in model_out:
             metric_key = f'obj_mask_{split}_{loader_key}_segmentation_metrics'
             if batch_idx == 0:
                 setattr(self, metric_key, SegmentationMetrics())
@@ -70,5 +75,33 @@ class BlockAttentionMarginLoss():
             loss += F.relu(block_attention[:, bix].detach() - block_attention[:, bix + 1] + self.margin)
         return loss.mean()
 
+
 # TODO: Favor earlier blocks
 # TODO: Better grounding loss
+
+
+class CAMSuppressionLoss():
+    """
+    KLD loss between uniform distribution and inconfident CAM cell locations (inconfident towards GT class)
+    Inconfident regions are hard thresholded with mean CAM value
+    """
+
+    def __call__(self, cams, gt_ys):
+        b, c, h, w = cams.shape
+        cams = cams.reshape((b, c, h * w))
+        gt_cams = torch.gather(cams, dim=1, index=gt_ys.squeeze().unsqueeze(dim=1).unsqueeze(dim=2)
+                               .repeat(1, 1, h * w)).squeeze().reshape((b, h * w))
+        gt_max, gt_min, gt_mean = torch.max(gt_cams, dim=1)[0], torch.min(gt_cams, dim=1)[0], torch.mean(gt_cams, dim=1)
+        norm_gt_cams = (gt_cams - gt_min.unsqueeze(1)) / (gt_max.unsqueeze(1) - gt_min.unsqueeze(1)).detach()
+
+        threshold = gt_mean.unsqueeze(1).repeat(1, h * w)
+
+        # Assign weights so that the locations which have a score lower than the threshold are suppressed
+        # supp_wt = torch.where(gt_cams > threshold, torch.zeros_like(norm_gt_cams), torch.ones_like(norm_gt_cams))
+        supp_wt = torch.where(gt_cams > threshold, torch.zeros_like(norm_gt_cams), 1 - norm_gt_cams)
+
+        uniform_targets = torch.ones_like(cams) / c
+        uniform_kld_loss = torch.sum(uniform_targets * (torch.log_softmax(uniform_targets, dim=1) -
+                                                        torch.log_softmax(cams, dim=1)), dim=1)
+        supp_loss = (supp_wt * uniform_kld_loss).mean()
+        return supp_loss

@@ -16,7 +16,9 @@ from models.var_block_occam_resnet_v2 import *
 from models.occam_resnet_v2_same_dim import  *
 
 def build_model(model_config):
-    if 'occam' in model_config.name:  # or 'resnet' in model_config.name:
+    if 'occam_resnet18_v2_obj_score' in model_config.name:
+        m = eval(model_config.name)(model_config.num_classes, model_config.threshold_coeff)
+    elif 'occam' in model_config.name:  # or 'resnet' in model_config.name:
         m = eval(model_config.name)(model_config.num_classes)
     elif 'efficientnet_b' in model_config.name:
         m = eval(model_config.name)(pretrained=False)
