@@ -1,9 +1,8 @@
-from models.occam_lib_v2 import *
+from models.occam_lib import *
 from models.variable_width_resnet import VariableWidthResNet, BasicBlock, Bottleneck
-import math
 
 
-class OccamResNetV2(VariableWidthResNet):
+class OccamResNetv2(VariableWidthResNet):
     def __init__(
             self,
             block,
@@ -67,10 +66,10 @@ class OccamResNetV2(VariableWidthResNet):
         return self.multi_exit
 
 
-def occam_resnet18_img64_v2(num_classes, width=58, multi_exit_type=MultiExitModule, exits_kwargs={}):
+def occam_resnet18_img64(num_classes, width=58, multi_exit_type=MultiExitModule, exits_kwargs={}):
     if 'exit_out_dims' not in exits_kwargs:
         exits_kwargs['exit_out_dims'] = num_classes
-    return OccamResNetV2(block=BasicBlock,
+    return OccamResNetv2(block=BasicBlock,
                          layers=[2, 2, 2, 2],
                          width=width,
                          initial_kernel_size=3,
@@ -81,18 +80,76 @@ def occam_resnet18_img64_v2(num_classes, width=58, multi_exit_type=MultiExitModu
                          exits_kwargs=exits_kwargs)
 
 
-def occam_resnet18_v2(num_classes, width=58, multi_exit_type=MultiExitModule, exits_kwargs={}):
+def occam_resnet18(num_classes, width=58, multi_exit_type=MultiExitModule, exits_kwargs={}):
     if 'exit_out_dims' not in exits_kwargs:
         exits_kwargs['exit_out_dims'] = num_classes
-    return OccamResNetV2(block=BasicBlock,
+    return OccamResNetv2(block=BasicBlock,
                          layers=[2, 2, 2, 2],
                          width=width,
                          multi_exit_type=multi_exit_type,
                          exits_kwargs=exits_kwargs)
 
 
+def occam_resnet18_cosine_sim(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={'exit_type': CosineSimilarityExitModule})
+
+
+def occam_resnet18_img64_cosine_sim(num_classes):
+    return occam_resnet18_img64(num_classes, exits_kwargs={'exit_type': CosineSimilarityExitModule})
+
+
+def occam_resnet18_hid_512(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={'exit_hid_dims': [None, 512, 512, 512]})
+
+
+def occam_resnet18_cosine_sim_hid_512(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={'exit_type': CosineSimilarityExitModule,
+                                                     'exit_hid_dims': [None, 512, 512, 512]})
+
+
+def occam_resnet18_thresholded_cosine_sim(num_classes):
+    return occam_resnet18(num_classes, exits_kwargs={'exit_type': ThresholdedCosineSimilarityExitModule})
+
+
+# Change stride/kernel size
+def occam_resnet18_k3s2(num_classes):
+    return occam_resnet18(num_classes,
+                          exits_kwargs={
+                              'exit_kernel_sizes': [3] * 4,
+                              'exit_strides': [2] * 4})
+
+
+def occam_resnet18_k5s2(num_classes):
+    return occam_resnet18(num_classes,
+                          exits_kwargs={
+                              'exit_kernel_sizes': [5] * 4,
+                              'exit_strides': [2] * 4})
+
+
+def occam_resnet18_k9753s2(num_classes):
+    return occam_resnet18(num_classes,
+                          exits_kwargs={
+                              'exit_kernel_sizes': [9, 7, 5, 3]})
+
+
+def occam_resnet18_hid(num_classes, hid_dims):
+    return occam_resnet18(num_classes, exits_kwargs={'exit_hid_dims': [hid_dims] * 4})
+
+
+def occam_resnet18_hid8(num_classes):
+    return occam_resnet18_hid(num_classes, 8)
+
+
+def occam_resnet18_hid16(num_classes):
+    return occam_resnet18_hid(num_classes, 16)
+
+
+def occam_resnet18_hid32(num_classes):
+    return occam_resnet18_hid(num_classes, 16)
+
+
 if __name__ == "__main__":
-    m = occam_resnet18_v2(20)
+    m = occam_resnet18_img64(20)
     print(m)
     x = torch.rand((5, 3, 224, 224))
     out = m(x)

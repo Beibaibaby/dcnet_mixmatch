@@ -1,107 +1,134 @@
+import logging
+import os
+
 from trainers.base_trainer import BaseTrainer
-from utils.cam_utils import *
-from analysis.analyze_segmentation import save_heatmap, SegmentationMetrics
+import torch
+import torch.nn.functional as F
+from utils.metrics import Accuracy
+from models.occam_lib_v2 import MultiExitStats
+from analysis.analyze_segmentation import SegmentationMetrics, save_exitwise_heatmaps
+from utils.cam_utils import get_class_cams_for_occam_nets, get_early_exit_cams
 
 
 class OccamTrainerV2(BaseTrainer):
+    """
+    Implementation for: OccamNetsV2
+    """
 
-    def forward(self, x, batch=None):
-        return self.model(x, batch['y'])
+    def __init__(self, config):
+        super().__init__(config)
+        # validation checks
+        assert hasattr(self.model, 'multi_exit')
 
-    def compute_loss(self, outs, y):
-        ce_loss = F.cross_entropy(outs['logits'].squeeze(), y.squeeze())
-        self.log(f'ce_loss', ce_loss)
-        loss = ce_loss
+    def training_step(self, batch, batch_idx):
+        model_out = self(batch['x'])
+        loss = 0
 
-        block_attn_cfg = self.trainer_cfg.block_attention
-        if block_attn_cfg.loss_wt > 0:
-            block_attn_loss = block_attn_cfg.loss_wt * BlockAttentionMarginLoss(block_attn_cfg.margin)(
-                outs['block_attention'])
-            self.log(f'block_attn_loss', block_attn_loss)
-            loss += block_attn_loss
-
-        if self.trainer_cfg.cam_suppression_loss_wt != 0:
-            cam_loss = CAMSuppressionLoss()(outs['cams'], y) * self.trainer_cfg.cam_suppression_loss_wt
-            self.log('cam_loss', cam_loss)
-            loss += cam_loss
+        if batch_idx == 0:
+            self.exit_loss = ExitLoss(len(self.model.multi_exit.exit_block_nums))
+        loss_dict = self.exit_loss(model_out, batch['y'])
+        for exit_ix in loss_dict:
+            self.log(f'E={exit_ix}, bce', loss_dict[exit_ix])
+            loss += loss_dict[exit_ix]
         return loss
+
+    def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None):
+        if model_outputs is None:
+            model_outputs = self(batch['x'])
+        super().shared_validation_step(batch, batch_idx, split, dataloader_idx, model_outputs)
+        if batch_idx == 0:
+            me_stats = MultiExitStats()
+            setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_multi_exit_stats', me_stats)
+        me_stats = getattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_multi_exit_stats')
+        num_exits = len(self.model.multi_exit.exit_block_nums)
+        me_stats(num_exits, model_outputs, batch['y'], batch['class_name'], batch['group_name'])
+
+    def shared_validation_epoch_end(self, outputs, split):
+        super().shared_validation_epoch_end(outputs, split)
+        loader_keys = self.get_dataloader_keys(split)
+        for loader_key in loader_keys:
+            me_stats = getattr(self, f'{split}_{loader_key}_multi_exit_stats')
+            self.log_dict(me_stats.summary(prefix=f'{split} {loader_key} '))
+
+    def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
+        if 'mask' not in batch:
+            return
+
+        loader_key = self.get_loader_name(split, dataloader_idx)
+
+        # Per-exit segmentation metrics
+        for cls_type in ['gt', 'pred']:
+            exit_to_class_cams = {}
+
+            for exit_name in self.model.multi_exit.get_exit_names():
+                metric_key = f'{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
+
+                if batch_idx == 0:
+                    setattr(self, metric_key, SegmentationMetrics())
+                gt_masks = batch['mask']
+                classes = batch['y'] if cls_type == 'gt' else model_out[f"{exit_name}, logits"].argmax(dim=-1)
+                class_cams = get_class_cams_for_occam_nets(model_out[f"{exit_name}, cam"], classes)
+                getattr(self, metric_key).update(gt_masks, class_cams)
+                exit_to_class_cams[exit_name] = class_cams
+            self.save_heat_maps_step(batch_idx, batch, exit_to_class_cams, heat_map_suffix=f"_{cls_type}")
+
+    def save_heat_maps_step(self, batch_idx, batch, exit_to_heat_maps, heat_map_suffix=''):
+        """
+        Saves the original image, GT mask and the predicted CAMs for the first sample in the batch
+        :param batch_idx:
+        :param batch:
+        :param exit_to_heat_maps:
+        :return:
+        """
+        _exit_to_heat_maps = {}
+        for en in exit_to_heat_maps:
+            _exit_to_heat_maps[en] = exit_to_heat_maps[en][0]
+        save_dir = os.path.join(os.getcwd(), f'visualizations_ep{self.current_epoch}_b{batch_idx}')
+        gt_mask = None if 'mask' not in batch else batch['mask'][0]
+        save_exitwise_heatmaps(batch['x'][0], gt_mask, _exit_to_heat_maps, save_dir, heat_map_suffix=heat_map_suffix)
+
+    def segmentation_metric_epoch_end(self, split, loader_key):
+        for cls_type in ['gt', 'pred']:
+            for exit_name in self.model.multi_exit.get_exit_names():
+                metric_key = f'{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
+                if hasattr(self, metric_key):
+                    seg_metric_vals = getattr(self, metric_key).summary()
+                    for sk in seg_metric_vals:
+                        self.log(f"{cls_type} {split} {loader_key} {exit_name} {sk}", seg_metric_vals[sk])
 
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out['logits'], batch['y'], batch['class_name'], batch['group_name'])
 
-    def get_class_cams(self, batch, model_out, class_type):
-        classes = batch['y'] if class_type == 'gt' else model_out['logits'].argmax(dim=-1)
-        return get_class_cams_for_occam_nets(model_out['cams'], classes)
 
-    def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
-        super().segmentation_metric_step(batch, batch_idx, model_out, split, dataloader_idx=dataloader_idx)
-        loader_key = self.get_loader_name(split, dataloader_idx)
-        for cls_type in ['gt', 'pred']:
-            cams = get_class_cams_for_occam_nets(model_out['cams'],
-                                                 self.get_classes(batch, model_out['logits'], cls_type))
-            self.save_heatmaps(batch, batch_idx, cams, dir=f'{split}_{loader_key}', heat_map_suffix=f'_{cls_type}')
+class ExitLoss():
+    def __init__(self, num_exits):
+        self.num_exits = num_exits
+        self.exit_to_min, self.exit_to_max = {}, {}
 
-        # Log metrics wrt similarity map
-        if 'mask' in batch and 'object_scores' in model_out:
-            metric_key = f'obj_mask_{split}_{loader_key}_segmentation_metrics'
-            if batch_idx == 0:
-                setattr(self, metric_key, SegmentationMetrics())
-            gt_masks = batch['mask']
-            getattr(self, metric_key).update(gt_masks, model_out['object_scores'])
-            self.save_heatmaps(batch, batch_idx, model_out['object_scores'], dir=f'{split}_{loader_key}',
-                               heat_map_suffix='_object_scores')
+    def __call__(self, exit_outs, gt_ys):
+        """
+        :param exit_outs: Dictionary mapping exit to CAMs, assumes they are ordered sequentially
+        :return:
+        """
+        gt_score = 1
+        loss_dict = {}
+        for exit_ix in range(self.num_exits):
+            cam = exit_outs[f'E={exit_ix}, cam']
+            logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
+            gt_hot = torch.zeros_like(logits)
+            if exit_ix == 0:
+                gt_hot[torch.arange(len(gt_hot)), gt_ys.squeeze()] = 1
+            else:
+                gt_hot[torch.arange(len(gt_hot)), gt_ys.squeeze()] = (gt_score.detach() - self.exit_to_min[
+                    exit_ix - 1]) / (self.exit_to_max[exit_ix - 1] - self.exit_to_min[exit_ix - 1])
+            loss_dict[exit_ix] = F.binary_cross_entropy_with_logits(logits, gt_hot)
+            scores = torch.sigmoid(logits).gather(1, gt_ys.squeeze().view(-1, 1)).squeeze()
+            gt_score = gt_score * (1 - scores)
+            # For normalization
+            _min, _max = gt_score.min().detach(), gt_score.max().detach()
+            if exit_ix not in self.exit_to_min or _min < self.exit_to_min[exit_ix]:
+                self.exit_to_min[exit_ix] = _min
+            if exit_ix not in self.exit_to_max or _max > self.exit_to_max[exit_ix]:
+                self.exit_to_max[exit_ix] = _max
 
-    def segmentation_metric_epoch_end(self, split, loader_key):
-        super().segmentation_metric_epoch_end(split, loader_key)
-        metric_key = f'obj_mask_{split}_{loader_key}_segmentation_metrics'
-        if hasattr(self, metric_key):
-            seg_metric_vals = getattr(self, metric_key).summary()
-            for sk in seg_metric_vals:
-                self.log(f"{metric_key} {sk}", seg_metric_vals[sk])
-
-    def save_heatmaps(self, batch, batch_idx, heat_maps, dir, heat_map_suffix=''):
-        save_dir = os.path.join(os.getcwd(), f'viz_{dir}/ep{self.current_epoch}/b{batch_idx}')
-        gt_mask = None if 'mask' not in batch else batch['mask'][0]
-        save_heatmap(batch['x'][0], heat_maps[0], save_dir, heat_map_suffix=heat_map_suffix, gt_mask=gt_mask)
-
-
-class BlockAttentionMarginLoss():
-    def __init__(self, margin):
-        self.margin = margin
-
-    def __call__(self, block_attention):
-        loss = 0
-        for bix in range(block_attention.shape[1] - 1):
-            loss += F.relu(block_attention[:, bix].detach() - block_attention[:, bix + 1] + self.margin)
-        return loss.mean()
-
-
-# TODO: Favor earlier blocks
-# TODO: Better grounding loss
-
-
-class CAMSuppressionLoss():
-    """
-    KLD loss between uniform distribution and inconfident CAM cell locations (inconfident towards GT class)
-    Inconfident regions are hard thresholded with mean CAM value
-    """
-
-    def __call__(self, cams, gt_ys):
-        b, c, h, w = cams.shape
-        cams = cams.reshape((b, c, h * w))
-        gt_cams = torch.gather(cams, dim=1, index=gt_ys.squeeze().unsqueeze(dim=1).unsqueeze(dim=2)
-                               .repeat(1, 1, h * w)).squeeze().reshape((b, h * w))
-        gt_max, gt_min, gt_mean = torch.max(gt_cams, dim=1)[0], torch.min(gt_cams, dim=1)[0], torch.mean(gt_cams, dim=1)
-        norm_gt_cams = (gt_cams - gt_min.unsqueeze(1)) / (gt_max.unsqueeze(1) - gt_min.unsqueeze(1)).detach()
-
-        threshold = gt_mean.unsqueeze(1).repeat(1, h * w)
-
-        # Assign weights so that the locations which have a score lower than the threshold are suppressed
-        # supp_wt = torch.where(gt_cams > threshold, torch.zeros_like(norm_gt_cams), torch.ones_like(norm_gt_cams))
-        supp_wt = torch.where(gt_cams > threshold, torch.zeros_like(norm_gt_cams), 1 - norm_gt_cams)
-
-        uniform_targets = torch.ones_like(cams) / c
-        uniform_kld_loss = torch.sum(uniform_targets * (torch.log_softmax(uniform_targets, dim=1) -
-                                                        torch.log_softmax(cams, dim=1)), dim=1)
-        supp_loss = (supp_wt * uniform_kld_loss).mean()
-        return supp_loss
+        return loss_dict

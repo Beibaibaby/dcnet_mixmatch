@@ -1,16 +1,16 @@
 #!/bin/bash
 source activate occamnets
 
-GPU=0
+GPU=1
 
 dataset=image_net
 optim=image_net
-subset_percent=8
+subset_percent=16
 precision=16
 
 block_attn_wt=0
 cam_supp_wt=0
-for model in occam_resnet18_v2_nlayers_1; do
+for model in occam_resnet18_v2; do
   CUDA_VISIBLE_DEVICES=${GPU} python main.py \
   model.name=${model} \
   trainer=occam_trainer_v2 \
@@ -23,9 +23,13 @@ for model in occam_resnet18_v2_nlayers_1; do
   expt_suffix=subset_${subset_percent}_prec_${precision}_block_attn_${block_attn_wt}_norm_cam_supp_wt_${cam_supp_wt}
 done
 
-# \
- #  trainer.limit_train_batches=2 \
- #  trainer.check_val_every_n_epoch=1 \
- #  trainer.limit_val_batches=2 \
- #  trainer.limit_test_batches=2
-#occam_resnet18_v2_ex2_resize_to_block1 occam_resnet18_v2_ex2_resize_to_block2
+
+CUDA_VISIBLE_DEVICES=${GPU} python main.py \
+model.name=occam_resnet18 \
+trainer=occam_trainer_image_net \
+trainer.precision=${precision} \
+trainer.cam_suppression.loss_wt=0 \
+dataset=${dataset} \
+dataset.subset_percent=${subset_percent} \
+optimizer=${optim} \
+expt_suffix=subset_${subset_percent}_supp_0_prec_${precision}

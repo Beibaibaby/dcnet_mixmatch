@@ -23,4 +23,4 @@ loss:
 track_loss: False
 segmentation_class_type: 'max' # 'gt'
 precision: 32
-gradient_clip_val: 0
+gradient_clip_val: null

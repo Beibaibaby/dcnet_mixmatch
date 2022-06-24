@@ -1,11 +1,7 @@
-import math
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from utils.metrics import Accuracy, ExitPercent
 from utils.cam_utils import *
 import os
-from utils.data_utils import get_dir
 
 
 class ExitDataTypes:
@@ -45,7 +41,6 @@ class Conv2(nn.Module):
 
 
 class SimpleGate(nn.Module):
-
     def __init__(self, in_dims, hid_dims=16, output_dims=1, non_linearity_type=nn.ReLU, norm_type=nn.BatchNorm1d):
         super(SimpleGate, self).__init__()
         self.net = nn.Sequential(
@@ -59,7 +54,6 @@ class SimpleGate(nn.Module):
         return nn.Linear
 
     def forward(self, x):
-
         if len(x.shape) > 2:
             x = F.adaptive_avg_pool2d(x, 1).squeeze()
         if len(x.shape) == 1:
@@ -228,7 +222,6 @@ class MultiExitModule(nn.Module):
             exit_strides=[None] * 4,
             inference_earliest_exit_ix=1,
             downsample_factors_for_scores=[1 / 8, 1 / 4, 1 / 2, 1]
-            # downsample_factors_for_scores=[1] * 4
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -291,7 +284,7 @@ class MultiExitModule(nn.Module):
     def set_return_early_exits(self, return_early_exits):
         self.return_early_exits = return_early_exits
 
-    def forward(self, block_num_to_exit_in, y=None):
+    def forward(self, block_num_to_exit_in, y=None, exit_strategy=None):
         exit_outs = {}
         exit_ix = 0
         for block_num in block_num_to_exit_in:
@@ -304,9 +297,17 @@ class MultiExitModule(nn.Module):
                     exit_outs[f"E={exit_ix}, {k}"] = exit_out[k]
                 exit_ix += 1
 
-        # Get names of triggered exits
-        self.get_early_exits(exit_outs)
+        if exit_strategy == 'combine':
+            pass
+        else:
+            self.get_early_exits(exit_outs)
         return exit_outs
+
+    def get_combined_logits(self, exit_outs):
+        for exit_ix in range(len(self.exit_block_nums)):
+            # if self.inference_earliest_exit_ix is not None and exit_ix < self.inference_earliest_exit_ix:
+            #     continue
+            exit_name = f"E={exit_ix}"
 
     def get_early_exits(self, exit_outs):
         exit_num = 0
@@ -356,9 +357,9 @@ class MultiExitStats:
             # Accuracy on all the samples
             self.exit_ix_to_stats[exit_ix]['accuracy'].update(logits, gt_ys, class_names, group_names)
 
-            for ee_name in exit_outs['early_exit_names']:
-                ee_ix = int(ee_name.split('E=')[1])
-                self.exit_ix_to_stats[exit_ix]['early_exit%'].update(int(ee_ix) == int(exit_ix))
+            # for ee_name in exit_outs['early_exit_names']:
+            #     ee_ix = int(ee_name.split('E=')[1])
+            #     self.exit_ix_to_stats[exit_ix]['early_exit%'].update(int(ee_ix) == int(exit_ix))
 
     def summary(self, prefix=''):
         exit_to_summary = {}
@@ -468,94 +469,3 @@ def visualize_reference_masks(img, sim_scores, top_k_cells, mask_h, mask_w, save
 
     score_hm = compute_heatmap(img, sim_scores.reshape(mask_h, mask_w))
     imwrite(os.path.join(save_path + "_similarity.jpg"), score_hm)
-
-# class SRGExitModule(ExitModule):
-#     def __init__(self, top_k=1, top_k_type='max', similarity_fn=cosine_similarity, layer='exit_in', **kwargs):
-#         super(SRGExitModule, self).__init__(**kwargs)
-#         self.top_k = top_k
-#         self.top_k_type = top_k_type
-#         self.similarity_fn = similarity_fn
-#         self.layer = layer
-#         self.set_downsample_factor(1)
-#
-#     def set_downsample_factor(self, downsample_factor):
-#         """
-#         Feature maps are downsampled by this factor before computing similarity scores
-#         :param downsample_factor:
-#         :return:
-#         """
-#         self.downsample_factor = downsample_factor
-#
-#     def forward(self, x, model_out={}, y=None):
-#         model_out = super().forward(x, model_out)
-#
-#         # Step 1: Get CAMs of either the GT or the highest scoring classes
-#         cams = model_out['cam']  # B x C x H x W
-#         hid = model_out[self.layer]
-#         classes = y if self.top_k_type == 'gt' else model_out['logits'].argmax(dim=-1)
-#         class_cams = get_class_cams_for_occam_nets(cams, classes)  # B x HW
-#         _, _, hid_h, hid_w = hid.shape
-#         tar_h, tar_w = int(hid_h * self.downsample_factor), int(hid_w * self.downsample_factor)
-#         hid = interpolate(hid, tar_h, tar_w)
-#         class_cams = interpolate(class_cams.unsqueeze(1), tar_h, tar_w).reshape(len(x), -1)
-#
-#         # Step 2: Get the highest scoring cells as reference cells
-#         top_k_ixs = torch.argsort(class_cams, dim=1, descending=True)[:, :self.top_k]  # B x top_k
-#         seeds = pos1d_to_pos2d(top_k_ixs, tar_h, tar_w)
-#
-#
-#         # Step 3: Generate a map to train localization of CAM
-#         similarity = seed_region_growing(hid, seeds)  # total_cells x top_k
-#         # model_out['ref_mask_top_k_cells'] = top_k_ixs
-#         model_out['ref_hid'] = hid
-#         model_out['ref_mask_scores'] = similarity
-#         return model_out
-
-
-# class SimilarityBasedMultiExitModule(MultiExitModule):
-#     def forward(self, block_num_to_exit_in, y=None):
-#         biased_exit_ixs = [0]
-#         exit_outs = {}
-#         hid_h, hid_w = None, None
-#         all_top_k_ixs = None
-#
-#         # Step 1: Get top_k_ixs from each of the exits (barring E.0)
-#         exit_ix = 0
-#         for block_num in block_num_to_exit_in:
-#             if block_num in self.exit_block_nums:
-#                 exit_in = block_num_to_exit_in[block_num]
-#                 if exit_ix in self.detached_exit_ixs:
-#                     exit_in = exit_in.detach()
-#                 hid, top_k_ixs, out = self.exits[exit_ix].forward_and_get_top_k_cells(exit_in, y=y)
-#                 for k in out:
-#                     exit_outs[f'E={exit_ix}, {k}'] = out[k]
-#
-#                 # Aggregate a common top_k_ixs
-#                 if exit_ix not in biased_exit_ixs:
-#                     if all_top_k_ixs is None:
-#                         all_top_k_ixs = top_k_ixs.clone()
-#                     else:
-#                         all_top_k_ixs = torch.cat([all_top_k_ixs, top_k_ixs], dim=1)
-#
-#                 # Verify that all the exits have same spatial dims (albeit resized)
-#                 if hid_h is not None:
-#                     assert hid.shape[2] == hid_h
-#                     assert hid.shape[3] == hid_w
-#                 hid_h, hid_w = hid.shape[2], hid.shape[3]
-#                 exit_ix += 1
-#
-#         # Step 2: Measure similarity using the same top_k_ixs in all the exits
-#         exit_ix = 0
-#         for block_num in block_num_to_exit_in:
-#             if block_num in self.exit_block_nums:
-#                 if exit_ix in biased_exit_ixs:
-#                     curr_top_k_ixs = exit_outs[f"E={exit_ix}, ref_top_k_ixs"][exit_ix]
-#                 else:
-#                     curr_top_k_ixs = all_top_k_ixs
-#                 similarity = self.exits[exit_ix].calc_similarity(exit_outs[f"E={exit_ix}, ref_hid"], curr_top_k_ixs)
-#                 exit_outs[f'E={exit_ix}, ref_mask_scores'] = similarity
-#                 exit_ix += 1
-#
-#         # Get names of triggered exits
-#         self.get_early_exits(exit_outs)
-#         return exit_outs

@@ -1,6 +1,6 @@
 from models.occam_lib import *
 from models.variable_width_resnet import VariableWidthResNet, BasicBlock, Bottleneck
-from models.occam_resnet_v2 import *
+from models.occam_resnet_not_v2 import *
 
 
 class VarBlockOccamResNetV2(VariableWidthResNet):
