@@ -1,13 +1,10 @@
-import logging
 import os
-
 from trainers.base_trainer import BaseTrainer
 import torch
 import torch.nn.functional as F
-from utils.metrics import Accuracy
 from models.occam_lib_v2 import MultiExitStats
 from analysis.analyze_segmentation import SegmentationMetrics, save_exitwise_heatmaps
-from utils.cam_utils import get_class_cams_for_occam_nets, get_early_exit_cams
+from utils.cam_utils import get_class_cams_for_occam_nets
 
 
 class OccamTrainerV2(BaseTrainer):
@@ -25,11 +22,12 @@ class OccamTrainerV2(BaseTrainer):
         loss = 0
 
         if batch_idx == 0:
-            self.exit_loss = ExitLoss(len(self.model.multi_exit.exit_block_nums))
+            self.exit_loss = SmoothExitLoss(len(self.model.multi_exit.exit_block_nums),
+                                            self.dataset_cfg.num_classes)
         loss_dict = self.exit_loss(model_out, batch['y'])
-        for exit_ix in loss_dict:
-            self.log(f'E={exit_ix}, bce', loss_dict[exit_ix])
-            loss += loss_dict[exit_ix]
+        for loss_key in loss_dict:
+            self.log(loss_key, loss_dict[loss_key])
+            loss += loss_dict[loss_key]
         return loss
 
     def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None):
@@ -100,35 +98,71 @@ class OccamTrainerV2(BaseTrainer):
         accuracy.update(model_out['logits'], batch['y'], batch['class_name'], batch['group_name'])
 
 
-class ExitLoss():
-    def __init__(self, num_exits):
+class SmoothExitLoss():
+    def __init__(self, num_exits, num_classes, initial_smoothing=0.1):
         self.num_exits = num_exits
-        self.exit_to_min, self.exit_to_max = {}, {}
+        self.num_classes = num_classes
+        self.initial_smoothing = initial_smoothing
+
+    # def __call__(self, exit_outs, gt_ys):
+    #     """
+    #     :param exit_outs: Dictionary mapping exit to CAMs, assumes they are ordered sequentially
+    #     :return:
+    #     """
+    #     gt_p = 1.
+    #     loss_dict = {}
+    #     for e in range(self.num_exits):
+    #         cam = exit_outs[f'E={e}, cam']
+    #         logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
+    #         gt_hot = torch.zeros_like(logits)
+    #         if e == 0:
+    #             gt_hot[torch.arange(len(gt_hot)), gt_ys.squeeze()] = 1
+    #             self.gt_mean[e] = gt_p
+    #             self.gt_std[e] = 0
+    #         else:
+    #             # gt_hot[torch.arange(len(gt_hot)), gt_ys.squeeze()] \
+    #             #     = (gt_score.detach() - self.min[e - 1]) / (self.max[e - 1] - self.min[e - 1])
+    #             gt_hot[torch.arange(len(gt_hot)), gt_ys.squeeze()] = gt_p.detach() / self.max[e - 1]
+    #             self.gt_mean[e] = float((gt_p.detach() / self.max[e - 1]).mean())
+    #             self.gt_std[e] = float((gt_p.detach() / self.max[e - 1]).std())
+    #         gt_hot[torch.arange(len(gt_hot)), gt_ys.squeeze()] = 1
+    #         loss_dict[e] = F.binary_cross_entropy_with_logits(logits, gt_hot)
+    #         scores = torch.sigmoid(logits).gather(1, gt_ys.squeeze().view(-1, 1)).squeeze()
+    #         gt_p = gt_p * (1 - scores)
+    #         # For normalization
+    #         _min, _max = gt_p.min().detach(), gt_p.max().detach()
+    #         if e not in self.min or _min < self.min[e]:
+    #             self.min[e] = _min
+    #         if e not in self.max or _max > self.max[e]:
+    #             self.max[e] = _max
+    #
+    #     return loss_dict
 
     def __call__(self, exit_outs, gt_ys):
         """
         :param exit_outs: Dictionary mapping exit to CAMs, assumes they are ordered sequentially
         :return:
         """
-        gt_score = 1
+        # Based on fixed label smoothing here:
+        # https://discuss.pytorch.org/t/what-is-the-formula-for-cross-entropy-loss-with-label-smoothing/149848
         loss_dict = {}
+        # Assign a score of 1 for the first exit
+        true_y_score = torch.ones(len(gt_ys)).to(gt_ys.device) * self.initial_smoothing
         for exit_ix in range(self.num_exits):
             cam = exit_outs[f'E={exit_ix}, cam']
             logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
-            gt_hot = torch.zeros_like(logits)
-            if exit_ix == 0:
-                gt_hot[torch.arange(len(gt_hot)), gt_ys.squeeze()] = 1
-            else:
-                gt_hot[torch.arange(len(gt_hot)), gt_ys.squeeze()] = (gt_score.detach() - self.exit_to_min[
-                    exit_ix - 1]) / (self.exit_to_max[exit_ix - 1] - self.exit_to_min[exit_ix - 1])
-            loss_dict[exit_ix] = F.binary_cross_entropy_with_logits(logits, gt_hot)
-            scores = torch.sigmoid(logits).gather(1, gt_ys.squeeze().view(-1, 1)).squeeze()
-            gt_score = gt_score * (1 - scores)
-            # For normalization
-            _min, _max = gt_score.min().detach(), gt_score.max().detach()
-            if exit_ix not in self.exit_to_min or _min < self.exit_to_min[exit_ix]:
-                self.exit_to_min[exit_ix] = _min
-            if exit_ix not in self.exit_to_max or _max > self.exit_to_max[exit_ix]:
-                self.exit_to_max[exit_ix] = _max
+            all_y_score = torch.ones_like(logits)
 
+            # Uniform scores for all classes
+            all_y_score = (1 - true_y_score.detach()).unsqueeze(1).repeat(1, all_y_score.shape[1]) / self.num_classes
+            # Assign higher score to ground truth class
+            all_y_score[torch.arange(len(gt_ys)), gt_ys.squeeze()] += true_y_score
+            all_y_score = all_y_score / all_y_score.max().detach()  # Normalize scores
+            gt_pred = torch.sigmoid(logits).gather(1, gt_ys.squeeze().view(-1, 1)).squeeze()
+
+            # If any of the previous exits had high gt_pred score, then subsequent exits have lower true_y_score
+            true_y_score = true_y_score * (1 - gt_pred)
+            # _loss = torch.sum(-all_y_score * logits.log_softmax(dim=1), dim=1).mean()
+            _loss = F.binary_cross_entropy_with_logits(logits, all_y_score)
+            loss_dict[f'E={exit_ix}, main'] = _loss
         return loss_dict

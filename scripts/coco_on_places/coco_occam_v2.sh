@@ -8,7 +8,7 @@ optim=coco_on_places
 precision=16
 
 CUDA_VISIBLE_DEVICES=${GPU} python main.py \
-model.name=occam_resnet18_v2 \
+model.name=occam_resnet18_img64_v2 \
 trainer=occam_trainer_v2 \
 trainer.precision=${precision} \
 dataset=${dataset} \
