@@ -5,18 +5,18 @@ GPU=0
 
 dataset=image_net
 optim=image_net
-subset_percent=1
+subset_percent=8
 precision=16
-start_epoch=50
-for model in occam_resnet18_v2; do
+
+block_attn_wt=0
+for model in occam_resnet18_v2_trans_resize_to_b1 occam_resnet18_v2_trans_resize_to_b2; do
   CUDA_VISIBLE_DEVICES=${GPU} python main.py \
   model.name=${model} \
   trainer=occam_trainer_v2 \
   trainer.precision=${precision} \
-  trainer.check_val_every_n_epoch=25 \
+  trainer.block_attention.loss_wt=${block_attn_wt} \
   dataset=${dataset} \
   dataset.subset_percent=${subset_percent} \
   optimizer=${optim} \
-  trainer.smooth_exit.start_epoch=${start_epoch} \
-  expt_suffix=subset_${subset_percent}_prec_${precision}_soft_exits_${start_epoch}
+  expt_suffix=subset_${subset_percent}_prec_${precision}_block_attn_${block_attn_wt}
 done
