@@ -8,7 +8,7 @@ from trainers.occam_trainer import *
 # from trainers.occam_trainer_v2old import *
 # from trainers.not_occam_trainer_v2 import *
 from trainers.occam_trainer_v2 import *
-
+from trainers.label_smoothing_trainer import LabelSmoothingTrainer
 
 # from trainers.occam_trainer_lr_finder import *
 # from trainers.occam_group_upweighting_trainer import *
