@@ -21,14 +21,16 @@ class OccamTrainerV2(BaseTrainer):
         model_out = self(batch['x'])
         loss = 0
         main_loss_dict = eval(self.trainer_cfg.main_loss)(len(self.model.multi_exit.exits))(model_out, batch['y'])
-        cal_loss_dict = eval(self.trainer_cfg.calibration_loss)(len(self.model.multi_exit.exits))(model_out,
-                                                                                                       batch['y'])
         for ml in main_loss_dict:
             loss += main_loss_dict[ml]
         self.log_dict(main_loss_dict)
-        for cl in cal_loss_dict:
-            loss += self.trainer_cfg.calibration_loss_wt * cal_loss_dict[cl]
-        self.log_dict(cal_loss_dict)
+
+        if self.trainer_cfg.calibration_loss is not None:
+            cal_loss_dict = eval(self.trainer_cfg.calibration_loss)(len(self.model.multi_exit.exits))(model_out,
+                                                                                                      batch['y'])
+            for cl in cal_loss_dict:
+                loss += self.trainer_cfg.calibration_loss_wt * cal_loss_dict[cl]
+            self.log_dict(cal_loss_dict)
 
         return loss
 
@@ -135,9 +137,9 @@ class JointCELoss():
         return loss_dict
 
 
-class MDCA(torch.nn.Module):
+class MDCALoss(torch.nn.Module):
     def __init__(self, num_exits):
-        super(MDCA, self).__init__()
+        super(MDCALoss, self).__init__()
         self.num_exits = num_exits
 
     def forward(self, exit_outs, target):
@@ -165,15 +167,18 @@ class ResMDCALoss(torch.nn.Module):
         self.detach_prev = detach_prev
 
     def forward(self, exit_outs, target):
-        running_logits = 0
+        running_logits = None
         loss_dict = {}
         for exit_ix in range(self.num_exits):
             cam = exit_outs[f'E={exit_ix}, cam']
             logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
-            if self.detach_prev:
-                running_logits = logits + running_logits.detach()
+            if running_logits is None:
+                running_logits = logits
             else:
-                running_logits = logits + running_logits
+                if self.detach_prev:
+                    running_logits = logits + running_logits.detach()
+                else:
+                    running_logits = logits + running_logits
             # [batch, classes]
             loss = torch.tensor(0.0).cuda()
             batch, classes = running_logits.shape

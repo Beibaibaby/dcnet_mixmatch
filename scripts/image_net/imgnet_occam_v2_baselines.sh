@@ -5,16 +5,17 @@ GPU=0
 
 dataset=image_net
 optim=image_net
-subset_percent=1
+subset_percent=16
 precision=16
-for model in occam_resnet18_v2; do
+
+for main_loss in JointCELoss CELoss; do
   CUDA_VISIBLE_DEVICES=${GPU} python main.py \
-  model.name=${model} \
-  trainer=label_smoothing_trainer \
+  model.name=occam_resnet18_v2 \
+  trainer=occam_trainer_v2 \
   trainer.precision=${precision} \
-  trainer.check_val_every_n_epoch=16 \
   dataset=${dataset} \
   dataset.subset_percent=${subset_percent} \
   optimizer=${optim} \
-  expt_suffix=subset_${subset_percent}_prec_${precision}_soft_exits_${start_epoch}
+  trainer.main_loss=${main_loss} \
+  expt_suffix=${main_loss}_subset_${subset_percent}_prec_${precision}
 done
