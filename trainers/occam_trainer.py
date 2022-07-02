@@ -88,8 +88,8 @@ class OccamTrainer(BaseTrainer):
         super().shared_validation_step(batch, batch_idx, split, dataloader_idx, model_outputs)
         if batch_idx == 0:
             me_stats = MultiExitStats()
-            setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_multi_exit_stats', me_stats)
-        me_stats = getattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_multi_exit_stats')
+            setattr(self, f'{split}_{self.get_loader_key(split, dataloader_idx)}_multi_exit_stats', me_stats)
+        me_stats = getattr(self, f'{split}_{self.get_loader_key(split, dataloader_idx)}_multi_exit_stats')
         num_exits = len(self.model.multi_exit.exit_block_nums)
         me_stats(num_exits, model_outputs, batch['y'], batch['class_name'], batch['group_name'])
 
@@ -104,7 +104,7 @@ class OccamTrainer(BaseTrainer):
         if 'mask' not in batch:
             return
 
-        loader_key = self.get_loader_name(split, dataloader_idx)
+        loader_key = self.get_loader_key(split, dataloader_idx)
 
         # Per-exit segmentation metrics
         for cls_type in ['gt', 'pred']:
@@ -133,7 +133,7 @@ class OccamTrainer(BaseTrainer):
         _exit_to_heat_maps = {}
         for en in exit_to_heat_maps:
             _exit_to_heat_maps[en] = exit_to_heat_maps[en][0]
-        save_dir = os.path.join(os.getcwd(), f'visualizations_ep{self.current_epoch}_b{batch_idx}')
+        save_dir = os.path.join(os.getcwd(), f'viz/visualizations_ep{self.current_epoch}_b{batch_idx}')
         gt_mask = None if 'mask' not in batch else batch['mask'][0]
         save_exitwise_heatmaps(batch['x'][0], gt_mask, _exit_to_heat_maps, save_dir, heat_map_suffix=heat_map_suffix)
 

@@ -35,7 +35,7 @@ class NotOccamTrainerV2(BaseTrainer):
 
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         super().segmentation_metric_step(batch, batch_idx, model_out, split, dataloader_idx=dataloader_idx)
-        loader_key = self.get_loader_name(split, dataloader_idx)
+        loader_key = self.get_loader_key(split, dataloader_idx)
         for cls_type in ['gt', 'pred']:
             cams = get_class_cams_for_occam_nets(model_out['cams'],
                                                  self.get_classes(batch, model_out['logits'], cls_type))

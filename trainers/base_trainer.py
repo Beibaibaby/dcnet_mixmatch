@@ -46,8 +46,8 @@ class BaseTrainer(pl.LightningModule):
             model_out = self(batch['x'], batch)
         if batch_idx == 0:
             accuracy = Accuracy()
-            setattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy', accuracy)
-        accuracy = getattr(self, f'{split}_{self.get_loader_name(split, dataloader_idx)}_accuracy')
+            setattr(self, f'{split}_{self.get_loader_key(split, dataloader_idx)}_accuracy', accuracy)
+        accuracy = getattr(self, f'{split}_{self.get_loader_key(split, dataloader_idx)}_accuracy')
         self.accuracy_metric_step(batch, batch_idx, model_out, split, dataloader_idx, accuracy)
         self.segmentation_metric_step(batch, batch_idx, model_out, split, dataloader_idx)
 
@@ -89,7 +89,7 @@ class BaseTrainer(pl.LightningModule):
     def get_dataloader_keys(self, split):
         return getattr(self, f'{split}_dataloader_keys')
 
-    def get_loader_name(self, split, dataloader_idx):
+    def get_loader_key(self, split, dataloader_idx):
         """
         Maps id of the dataloader (of the specified split) to its name, which is assumed to be set via set_dataloader_keys
         :param split:
@@ -112,7 +112,7 @@ class BaseTrainer(pl.LightningModule):
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         if 'mask' not in batch:
             return
-        loader_key = self.get_loader_name(split, dataloader_idx)
+        loader_key = self.get_loader_key(split, dataloader_idx)
         for cls_type in ['gt', 'pred']:  # Save segmentation metrics wrt GT vs predicted classes
             metric_key = f'{cls_type}_{split}_{loader_key}_segmentation_metrics'
             if batch_idx == 0:

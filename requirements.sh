@@ -22,3 +22,4 @@ pip install matplotlib
 pip install seaborn
 pip install tensorboard
 pip install torch-summary
+pip install netcal # Installs latest pytorch too, which may or may not be compatible

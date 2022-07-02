@@ -51,7 +51,7 @@ class OccamTrainerv2Old(OccamTrainer):
         """
         if 'mask' not in batch:
             return
-        loader_key = self.get_loader_name(split, dataloader_idx)
+        loader_key = self.get_loader_key(split, dataloader_idx)
         exit_name_to_mask_scores = {}
         assert self.model.multi_exit.get_exit_names()[-1] == 'E=early'
         for exit_name in self.model.multi_exit.get_exit_names():
