@@ -7,6 +7,8 @@ import numpy as np
 from datasets.augmentation_utils import build_transformation_list
 import torch
 import json
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 def pil_loader(path):
