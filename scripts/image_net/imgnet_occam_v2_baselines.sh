@@ -17,5 +17,6 @@ for main_loss in JointCELoss CELoss; do
   dataset.subset_percent=${subset_percent} \
   optimizer=${optim} \
   trainer.main_loss=${main_loss} \
-  expt_suffix=${main_loss}_subset_${subset_percent}_prec_${precision}
+  expt_suffix=${main_loss}_subset_${subset_percent}_prec_${precision} \
+
 done

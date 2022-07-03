@@ -5,8 +5,6 @@ import torch.nn.functional as F
 from models.occam_lib_v2 import MultiExitStats
 from analysis.analyze_segmentation import SegmentationMetrics, save_exitwise_heatmaps
 from utils.cam_utils import get_class_cams_for_occam_nets
-from netcal.scaling import TemperatureScaling
-from netcal.metrics import ECE
 from netcal.presentation import ReliabilityDiagram
 
 
@@ -27,13 +25,13 @@ class OccamTrainerV2(BaseTrainer):
         main_loss_dict = eval(self.trainer_cfg.main_loss)(self.num_exits)(model_out, batch['y'])
         for ml in main_loss_dict:
             loss += main_loss_dict[ml]
-        self.log_dict(main_loss_dict)
+        self.log_dict(main_loss_dict, py_logging=False)
 
         if self.trainer_cfg.calibration_loss is not None:
             cal_loss_dict = eval(self.trainer_cfg.calibration_loss)(self.num_exits)(model_out, batch['y'])
             for cl in cal_loss_dict:
                 loss += self.trainer_cfg.calibration_loss_wt * cal_loss_dict[cl]
-            self.log_dict(cal_loss_dict)
+            self.log_dict(cal_loss_dict, py_logging=False)
 
         return loss
 
@@ -45,12 +43,9 @@ class OccamTrainerV2(BaseTrainer):
         if batch_idx == 0:
             me_stats = MultiExitStats()
             setattr(self, f'{split}_{loader_key}_multi_exit_stats', me_stats)
-            setattr(self, f'{split}_{loader_key}_calibration_analysis', CalibrationAnalysis(self.num_exits))
+
         me_stats = getattr(self, f'{split}_{self.get_loader_key(split, dataloader_idx)}_multi_exit_stats')
         me_stats(self.num_exits, model_outputs, batch['y'], batch['class_name'], batch['group_name'])
-
-        cal = getattr(self, f'{split}_{loader_key}_calibration_analysis')
-        cal.update(batch, model_outputs)
 
     def shared_validation_epoch_end(self, outputs, split):
         super().shared_validation_epoch_end(outputs, split)
@@ -59,8 +54,6 @@ class OccamTrainerV2(BaseTrainer):
             me_stats = getattr(self, f'{split}_{loader_key}_multi_exit_stats')
             self.log_dict(me_stats.summary(prefix=f'{split} {loader_key} '))
 
-            cal = getattr(self, f'{split}_{loader_key}_calibration_analysis')
-            cal.plot_reliability_diagram(os.path.join(os.getcwd(), 'reliability_diagrams'))
 
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         if 'mask' not in batch:
@@ -110,6 +103,10 @@ class OccamTrainerV2(BaseTrainer):
 
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out['logits'], batch['y'], batch['class_name'], batch['group_name'])
+
+    def init_calibration_analysis(self, split, loader_key):
+        setattr(self, f'{split}_{loader_key}_calibration_analysis', CalibrationAnalysis(self.num_exits))
+
 
 
 class CELoss():
@@ -242,6 +239,5 @@ class CalibrationAnalysis():
         os.makedirs(save_dir, exist_ok=True)
 
         for exit_ix in self.exit_ix_to_logits:
-            print(f"exit_ix = {exit_ix}")
-            curr_conf = torch.softmax(self.exit_ix_to_logits[exit_ix], dim=1).numpy()
+            curr_conf = torch.softmax(self.exit_ix_to_logits[exit_ix].float(), dim=1).numpy()
             diagram.plot(curr_conf, gt_ys, filename=os.path.join(save_dir, f'{exit_ix}.png'))

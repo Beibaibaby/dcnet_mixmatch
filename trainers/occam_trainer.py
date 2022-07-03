@@ -9,7 +9,7 @@ from models.occam_lib import MultiExitStats
 from analysis.analyze_segmentation import SegmentationMetrics, save_exitwise_heatmaps
 from utils.cam_utils import get_class_cams_for_occam_nets, get_early_exit_cams
 from utils.data_utils import inv_sigmoid
-
+from trainers.occam_trainer_v2 import CalibrationAnalysis
 
 class OccamTrainer(BaseTrainer):
     """
@@ -20,6 +20,7 @@ class OccamTrainer(BaseTrainer):
         super().__init__(config)
         # validation checks
         assert hasattr(self.model, 'multi_exit')
+        self.num_exits = len(self.model.multi_exit.exit_block_nums)
 
     def training_step(self, batch, batch_idx):
         model_out = self(batch['x'])
@@ -90,8 +91,8 @@ class OccamTrainer(BaseTrainer):
             me_stats = MultiExitStats()
             setattr(self, f'{split}_{self.get_loader_key(split, dataloader_idx)}_multi_exit_stats', me_stats)
         me_stats = getattr(self, f'{split}_{self.get_loader_key(split, dataloader_idx)}_multi_exit_stats')
-        num_exits = len(self.model.multi_exit.exit_block_nums)
-        me_stats(num_exits, model_outputs, batch['y'], batch['class_name'], batch['group_name'])
+
+        me_stats(self.num_exits, model_outputs, batch['y'], batch['class_name'], batch['group_name'])
 
     def shared_validation_epoch_end(self, outputs, split):
         super().shared_validation_epoch_end(outputs, split)
@@ -160,6 +161,8 @@ class OccamTrainer(BaseTrainer):
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out['E=early, logits'], batch['y'], batch['class_name'], batch['group_name'])
 
+    def init_calibration_analysis(self, split, loader_key):
+        setattr(self, f'{split}_{loader_key}_calibration_analysis', CalibrationAnalysis(self.num_exits))
 
 class GateWeightedCELoss():
     def __init__(self, gamma0=3, gamma=1, eps=1e-5, offset=0.1):

@@ -1,7 +1,7 @@
 #!/bin/bash
 source activate occamnets
 
-GPU=0
+GPU=1
 
 dataset=image_net
 optim=image_net
