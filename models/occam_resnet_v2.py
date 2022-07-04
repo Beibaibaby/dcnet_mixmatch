@@ -99,6 +99,54 @@ def occam_resnet18_v2_poe_detach_prev(num_classes):
     return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoEDetachPrev)
 
 
+def occam_resnet18_v2_poe_detach_prev_depthwise(num_classes, kernel_sizes, exit_strides, exit_padding):
+    return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoEDetachPrev,
+                             exits_kwargs={
+                                 'exit_initial_conv_type': DepthWiseConv2,
+                                 'exit_kernel_sizes': kernel_sizes,
+                                 'exit_strides': exit_strides,
+                                 'exit_width_factors': [8, 4, 2, 1],
+                                 'cam_width_factors': [8, 4, 2, 1],
+                                 'exit_padding': exit_padding
+                             })
+
+
+def occam_resnet18_v2_poe_detach_prev_depthwise11(num_classes):
+    return occam_resnet18_v2_poe_detach_prev_depthwise(num_classes,
+                                                       kernel_sizes=[11, 9, 7, 5],
+                                                       exit_strides=[5, 4, 3, 2],
+                                                       exit_padding=[5, 4, 3, 2])
+    # exit_strides=[10, 5, 3, 2])
+
+
+def occam_resnet18_v2_poe_detach_prev_depthwise9(num_classes):
+    return occam_resnet18_v2_poe_detach_prev_depthwise(num_classes,
+                                                       kernel_sizes=[9, 7, 5, 3],
+                                                       exit_strides=[4, 3, 2, 1],
+                                                       exit_padding=[4, 3, 2, 1])
+
+
+def occam_resnet18_v2_poe_detach_prev_depthwise_k_all_3(num_classes):
+    return occam_resnet18_v2_poe_detach_prev_depthwise(num_classes,
+                                                       kernel_sizes=[3] * 4,
+                                                       exit_strides=[1] * 4,
+                                                       exit_padding=[1] * 4)
+
+
+def occam_resnet18_v2_poe_detach_prev_depthwise_all_5(num_classes):
+    return occam_resnet18_v2_poe_detach_prev_depthwise(num_classes,
+                                                       kernel_sizes=[5] * 4,
+                                                       exit_strides=[2] * 4,
+                                                       exit_padding=[2] * 4)
+
+
+def occam_resnet18_v2_poe_detach_prev_depthwise_all_7(num_classes):
+    return occam_resnet18_v2_poe_detach_prev_depthwise(num_classes,
+                                                       kernel_sizes=[7] * 4,
+                                                       exit_strides=[3] * 4,
+                                                       exit_padding=[3] * 4)
+
+
 if __name__ == "__main__":
     m = occam_resnet18_v2(20)
     print(m)

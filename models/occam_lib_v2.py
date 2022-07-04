@@ -7,20 +7,47 @@ def build_non_linearity(non_linearity_type, num_features):
     return non_linearity_type()
 
 
-class Conv2(nn.Module):
+# class Conv2(nn.Module):
+#     def __init__(self, in_features, hid_features, out_features, norm_type=nn.BatchNorm2d, non_linearity_type=nn.ReLU,
+#                  groups=1, conv_type=nn.Conv2d, kernel_size=3, stride=1, padding=1):
+#         super(Conv2, self).__init__()
+#         if padding is None:
+#             padding = kernel_size // 2
+#         self.conv1 = conv_type(in_channels=in_features, out_channels=hid_features, kernel_size=kernel_size,
+#                                stride=stride,
+#                                padding=padding,
+#                                groups=groups)
+#         self.norm1 = norm_type(hid_features)
+#         self.non_linear1 = build_non_linearity(non_linearity_type, hid_features)
+#         self.conv2 = nn.Conv2d(in_channels=hid_features, out_channels=out_features, kernel_size=kernel_size,
+#                                stride=stride,
+#                                padding=kernel_size // 2,
+#                                groups=groups)
+#
+#     def forward(self, x):
+#         x = self.conv1(x)
+#         x = self.norm1(x)
+#         x = self.non_linear1(x)
+#         x = self.conv2(x)
+#         return x
+
+
+class DepthWiseConv2(nn.Module):
     def __init__(self, in_features, hid_features, out_features, norm_type=nn.BatchNorm2d, non_linearity_type=nn.ReLU,
-                 groups=1, conv_type=nn.Conv2d, kernel_size=3, stride=1):
-        super(Conv2, self).__init__()
+                 conv_type=nn.Conv2d, kernel_size=3, stride=None, padding=None):
+        super(DepthWiseConv2, self).__init__()
+        if stride is None:
+            stride = 1
         self.conv1 = conv_type(in_channels=in_features, out_channels=hid_features, kernel_size=kernel_size,
                                stride=stride,
-                               padding=kernel_size // 2,
-                               groups=groups)
+                               padding=padding,
+                               groups=min(in_features, hid_features))
         self.norm1 = norm_type(hid_features)
         self.non_linear1 = build_non_linearity(non_linearity_type, hid_features)
-        self.conv2 = nn.Conv2d(in_channels=hid_features, out_channels=out_features, kernel_size=kernel_size,
-                               stride=stride,
-                               padding=kernel_size // 2,
-                               groups=groups)
+        self.conv2 = nn.Conv2d(in_channels=hid_features, out_channels=out_features, kernel_size=3,
+                               stride=1,
+                               padding=1,
+                               groups=min(hid_features, out_features))
 
     def forward(self, x):
         x = self.conv1(x)
@@ -40,11 +67,12 @@ class ExitModule(nn.Module):
                  groups=1,
                  kernel_size=3,
                  stride=None,
-                 initial_conv_type=Conv2,
+                 initial_conv_type=DepthWiseConv2,
                  conv_bias=False,
                  conv_type=nn.Conv2d,
                  norm_type=nn.BatchNorm2d,
                  non_linearity_type=nn.ReLU,
+                 padding=None
                  ):
         super(ExitModule, self).__init__()
         self.in_dims = in_dims
@@ -59,9 +87,8 @@ class ExitModule(nn.Module):
         self.scale_factor = scale_factor
         self.groups = groups
         self.kernel_size = kernel_size
-        if stride is None:
-            stride = kernel_size // 2
         self.stride = stride
+        self.padding = padding
         self.norm_type = norm_type
         self.non_linearity_type = non_linearity_type
         self.build_network()
@@ -74,7 +101,8 @@ class ExitModule(nn.Module):
                                             non_linearity_type=self.non_linearity_type,
                                             conv_type=self.conv_type,
                                             kernel_size=self.kernel_size,
-                                            stride=self.stride)
+                                            stride=self.stride,
+                                            padding=self.padding)
         self.non_linearity = build_non_linearity(self.non_linearity_type, self.cam_hid_dims)
         self.cam = nn.Conv2d(
             in_channels=self.cam_hid_dims,
@@ -110,19 +138,18 @@ class MultiExitModule(nn.Module):
 
     def __init__(
             self,
-            detached_exit_ixs=[0],
+            detached_exit_ixs=[],
             exit_out_dims=None,
             exit_block_nums=[0, 1, 2, 3],
             exit_type=ExitModule,
-            exit_initial_conv_type=Conv2,
-            exit_hid_dims=[None, None, None, None],
-            exit_width_factors=[1 / 4, 1 / 4, 1 / 4, 1 / 4],
-            cam_width_factors=[1, 1, 1, 1],
-            exit_scale_factors=[1, 1, 1, 1],
-            exit_kernel_sizes=[3, 3, 3, 3],
+            exit_initial_conv_type=DepthWiseConv2,
+            exit_hid_dims=[None] * 4,
+            exit_width_factors=[1 / 4] * 4,
+            cam_width_factors=[1] * 4,
+            exit_scale_factors=[1] * 4,
+            exit_kernel_sizes=[3] * 4,
             exit_strides=[None] * 4,
-            inference_earliest_exit_ix=1,
-            downsample_factors_for_scores=[1 / 8, 1 / 4, 1 / 2, 1]
+            exit_padding=[None] * 4
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -134,8 +161,6 @@ class MultiExitModule(nn.Module):
         :param exit_width_factors:
         :param cam_width_factors:
         :param exit_scale_factors:
-        :param inference_earliest_exit_ix: The first exit to use for inference (default=1 i.e., E.0 is not used for inference)
-
         """
         super().__init__()
         self.detached_exit_ixs = detached_exit_ixs
@@ -149,8 +174,7 @@ class MultiExitModule(nn.Module):
         self.exit_scale_factors = exit_scale_factors
         self.exit_kernel_sizes = exit_kernel_sizes
         self.exit_strides = exit_strides
-        self.inference_earliest_exit_ix = inference_earliest_exit_ix
-        self.downsample_factors_for_scores = downsample_factors_for_scores
+        self.exit_padding = exit_padding
         self.exits = []
 
     def build_and_add_exit(self, in_dims):
@@ -165,10 +189,10 @@ class MultiExitModule(nn.Module):
             cam_hid_dims=int(in_dims * self.cam_width_factors[exit_ix]),
             kernel_size=self.exit_kernel_sizes[exit_ix],
             stride=self.exit_strides[exit_ix],
-            scale_factor=self.exit_scale_factors[exit_ix]
+            padding=self.exit_padding[exit_ix],
+            scale_factor=self.exit_scale_factors[exit_ix],
+            initial_conv_type=self.exit_initial_conv_type
         )
-        if hasattr(exit, 'set_downsample_factor'):
-            exit.set_downsample_factor(self.downsample_factors_for_scores[exit_ix])
         self.exits.append(exit)
         self.exits = nn.ModuleList(self.exits)
 
@@ -242,6 +266,7 @@ class MultiExitPoE(MultiExitModule):
                 running_cams, running_logits = cams, logits
             else:
                 _, _, h, w = cams.shape
+                # print(f"running = {running_cams.shape}, cams = {cams.shape}")
                 running_cams = interpolate(running_cams.detach(), h, w) + cams if self.detach_prev else interpolate(
                     running_cams, h, w) + cams
                 running_logits = running_logits.detach() + logits if self.detach_prev else running_logits + logits
