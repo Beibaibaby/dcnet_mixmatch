@@ -37,8 +37,7 @@ optimizer=${optim} \
 expt_suffix=${main_loss}_${calibration_loss}_${calibration_loss_wt}_subset_${subset_percent}_prec_${precision} \
 task.name='test' \
 data_sub_split='val_mask' \
-'checkpoint_path="/home/robik/occam-networks-outputs/image_net/OccamTrainerV2/occam_resnet18_v2/JointCELoss_ResMDCALoss_1.0_subset_16_prec_16/lightning_logs/version_0/checkpoints/epoch=49-step=20050.ckpt"' \
-trainer.limit_test_batches=2
+'checkpoint_path="/home/robik/occam-networks-outputs/image_net/OccamTrainerV2/occam_resnet18_v2/JointCELoss_ResMDCALoss_1.0_subset_16_prec_16/lightning_logs/version_0/checkpoints/epoch=49-step=20050.ckpt"'
 
 
 
