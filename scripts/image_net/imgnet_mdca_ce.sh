@@ -8,9 +8,9 @@ optim=image_net
 subset_percent=16
 precision=16
 
-for main_loss in JointCELoss; do
-  for calibration_loss in ResMDCALoss; do
-    for calibration_loss_wt in 1.0 2.0 5.0 10.0; do
+for calibration_loss_wt in 1.0 2.0 5.0 10.0; do
+  for main_loss in JointCELoss CELoss; do
+    for calibration_loss in MDCALoss; do
       CUDA_VISIBLE_DEVICES=${GPU} python main.py \
       model.name=occam_resnet18_v2 \
       trainer=occam_trainer_v2 \
