@@ -214,7 +214,6 @@ class CalibrationAnalysis():
             ece = ECE(bins).measure(curr_conf, gt_ys)
             diagram.plot(curr_conf, gt_ys, filename=os.path.join(save_dir, f'{exit_ix}.png'),
                          title_suffix=f' ECE={ece}')
-            print(f"saved to {save_dir}")
 
 # class JointCELoss():
 #     def __init__(self, num_exits):

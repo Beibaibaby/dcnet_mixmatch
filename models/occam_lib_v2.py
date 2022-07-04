@@ -235,14 +235,17 @@ class MultiExitPoE(MultiExitModule):
 
     def forward(self, block_num_to_exit_in, y=None):
         exit_outs = super().forward(block_num_to_exit_in)
-        running_logits = None
+        running_cams, running_logits = None, None
         for exit_ix in range(len(self.exit_block_nums)):
-            logits = exit_outs[f"E={exit_ix}, logits"]
+            cams, logits = exit_outs[f"E={exit_ix}, cam"], exit_outs[f"E={exit_ix}, logits"]
             if running_logits is None:
-                running_logits = logits
+                running_cams, running_logits = cams, logits
             else:
+                _, _, h, w = cams.shape
+                running_cams = interpolate(running_cams.detach(), h, w) + cams if self.detach_prev else interpolate(
+                    running_cams, h, w) + cams
                 running_logits = running_logits.detach() + logits if self.detach_prev else running_logits + logits
-            # TODO: PoE on CAMs too
+            exit_outs[f"E={exit_ix}, cam"] = running_cams
             exit_outs[f"E={exit_ix}, logits"] = running_logits
         return exit_outs
 

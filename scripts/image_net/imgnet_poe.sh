@@ -8,8 +8,8 @@ optim=image_net
 subset_percent=16
 precision=16
 
-for calibration_loss_wt in 1.0 2.0; do
-  for model in occam_resnet18_v2_poe occam_resnet18_v2_poe_detach_prev; do
+for calibration_loss_wt in 1 0 2; do
+  for model in occam_resnet18_v2_poe_detach_prev; do
     for main_loss in CELoss; do
       for calibration_loss in MDCALoss; do
         CUDA_VISIBLE_DEVICES=${GPU} python main.py \
@@ -22,7 +22,9 @@ for calibration_loss_wt in 1.0 2.0; do
         dataset=${dataset} \
         dataset.subset_percent=${subset_percent} \
         optimizer=${optim} \
-        expt_suffix=${main_loss}_${calibration_loss}_${calibration_loss_wt}_subset_${subset_percent}_prec_${precision}
+        expt_suffix=${main_loss}_${calibration_loss}_${calibration_loss_wt}_subset_${subset_percent}_prec_${precision} \
+        trainer.limit_train_batches=2 \
+        trainer.limit_val_batches=2
       done
     done
   done
