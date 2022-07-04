@@ -91,6 +91,14 @@ def occam_resnet18_v2(num_classes, width=58, multi_exit_type=MultiExitModule, ex
                          exits_kwargs=exits_kwargs)
 
 
+def occam_resnet18_v2_poe(num_classes):
+    return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoE)
+
+
+def occam_resnet18_v2_poe_detach_prev(num_classes):
+    return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoEDetachPrev)
+
+
 if __name__ == "__main__":
     m = occam_resnet18_v2(20)
     print(m)

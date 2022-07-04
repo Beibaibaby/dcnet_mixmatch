@@ -219,7 +219,6 @@ class MultiExitStats:
             # Accuracy on all the samples
             self.exit_ix_to_stats[exit_ix]['accuracy'].update(logits, gt_ys, class_names, group_names)
 
-
     def summary(self, prefix=''):
         exit_to_summary = {}
         for exit_ix in self.exit_ix_to_stats:
@@ -227,3 +226,28 @@ class MultiExitStats:
                 for k2 in self.exit_ix_to_stats[exit_ix][k].summary():
                     exit_to_summary[f"{prefix}E={exit_ix} {k2}"] = self.exit_ix_to_stats[exit_ix][k].summary()[k2]
         return exit_to_summary
+
+
+class MultiExitPoE(MultiExitModule):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.detach_prev = False
+
+    def forward(self, block_num_to_exit_in, y=None):
+        exit_outs = super().forward(block_num_to_exit_in)
+        running_logits = None
+        for exit_ix in range(len(self.exit_block_nums)):
+            logits = exit_outs[f"E={exit_ix}, logits"]
+            if running_logits is None:
+                running_logits = logits
+            else:
+                running_logits = running_logits.detach() + logits if self.detach_prev else running_logits + logits
+            # TODO: PoE on CAMs too
+            exit_outs[f"E={exit_ix}, logits"] = running_logits
+        return exit_outs
+
+
+class MultiExitPoEDetachPrev(MultiExitPoE):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.detach_prev = True

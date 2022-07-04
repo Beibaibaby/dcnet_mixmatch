@@ -6,6 +6,7 @@ from models.occam_lib_v2 import MultiExitStats
 from analysis.analyze_segmentation import SegmentationMetrics, save_exitwise_heatmaps
 from utils.cam_utils import get_class_cams_for_occam_nets
 from netcal.presentation import ReliabilityDiagram
+from netcal.metrics import ECE
 
 
 class OccamTrainerV2(BaseTrainer):
@@ -53,7 +54,6 @@ class OccamTrainerV2(BaseTrainer):
         for loader_key in loader_keys:
             me_stats = getattr(self, f'{split}_{loader_key}_multi_exit_stats')
             self.log_dict(me_stats.summary(prefix=f'{split} {loader_key} '))
-
 
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         if 'mask' not in batch:
@@ -108,7 +108,6 @@ class OccamTrainerV2(BaseTrainer):
         setattr(self, f'{split}_{loader_key}_calibration_analysis', CalibrationAnalysis(self.num_exits))
 
 
-
 class CELoss():
     def __init__(self, num_exits):
         self.num_exits = num_exits
@@ -119,28 +118,10 @@ class CELoss():
         :return:
         """
         for exit_ix in range(self.num_exits):
-            cam = exit_outs[f'E={exit_ix}, cam']
-            logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
+            logits = exit_outs[f'E={exit_ix}, logits']
+            # logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
             _loss = F.cross_entropy(logits, gt_ys.squeeze())
             loss_dict[f'E={exit_ix}, ce'] = _loss
-        return loss_dict
-
-
-class JointCELoss():
-    def __init__(self, num_exits):
-        self.num_exits = num_exits
-
-    def __call__(self, exit_outs, gt_ys, loss_dict={}):
-        """
-        :param exit_outs: Dictionary mapping exit to CAMs, assumes they are ordered sequentially
-        :return:
-        """
-        running_logits = 0
-        for exit_ix in range(self.num_exits):
-            cam = exit_outs[f'E={exit_ix}, cam']
-            running_logits += F.adaptive_avg_pool2d(cam, (1)).squeeze()
-        _loss = F.cross_entropy(running_logits, gt_ys.squeeze())
-        loss_dict[f'joint_ce'] = _loss
         return loss_dict
 
 
@@ -152,9 +133,7 @@ class MDCALoss(torch.nn.Module):
     def forward(self, exit_outs, target):
         loss_dict = {}
         for exit_ix in range(self.num_exits):
-            cam = exit_outs[f'E={exit_ix}, cam']
-            logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
-            # [batch, classes]
+            logits = exit_outs[f'E={exit_ix}, logits']
             loss = torch.tensor(0.0).cuda()
             batch, classes = logits.shape
             for c in range(classes):
@@ -165,43 +144,6 @@ class MDCALoss(torch.nn.Module):
             loss /= denom
             loss_dict[f'E={exit_ix},MDCA'] = loss
         return loss_dict
-
-
-class ResMDCALoss(torch.nn.Module):
-    def __init__(self, num_exits, detach_prev=False):
-        super(ResMDCALoss, self).__init__()
-        self.num_exits = num_exits
-        self.detach_prev = detach_prev
-
-    def forward(self, exit_outs, target):
-        running_logits = None
-        loss_dict = {}
-        for exit_ix in range(self.num_exits):
-            cam = exit_outs[f'E={exit_ix}, cam']
-            logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
-            if running_logits is None:
-                running_logits = logits
-            else:
-                if self.detach_prev:
-                    running_logits = logits + running_logits.detach()
-                else:
-                    running_logits = logits + running_logits
-            # [batch, classes]
-            loss = torch.tensor(0.0).cuda()
-            batch, classes = running_logits.shape
-            for c in range(classes):
-                avg_count = (target == c).float().mean()
-                avg_conf = torch.mean(running_logits[:, c])
-                loss += torch.abs(avg_conf - avg_count)
-            denom = classes
-            loss /= denom
-            loss_dict[f'E={exit_ix}, residual_calibration'] = loss
-        return loss_dict
-
-
-class ResMDCADetachedLoss(ResMDCALoss):
-    def __init__(self, num_exits):
-        super(ResMDCADetachedLoss, self).__init__(num_exits, detach_prev=True)
 
 
 class CalibrationAnalysis():
@@ -240,4 +182,61 @@ class CalibrationAnalysis():
 
         for exit_ix in self.exit_ix_to_logits:
             curr_conf = torch.softmax(self.exit_ix_to_logits[exit_ix].float(), dim=1).numpy()
-            diagram.plot(curr_conf, gt_ys, filename=os.path.join(save_dir, f'{exit_ix}.png'))
+            ece = ECE(bins).measure(curr_conf, gt_ys)
+            diagram.plot(curr_conf, gt_ys, filename=os.path.join(save_dir, f'{exit_ix}.png'),
+                         title_suffix=f' ECE={ece}')
+            print(f"saved to {save_dir}")
+
+# class JointCELoss():
+#     def __init__(self, num_exits):
+#         self.num_exits = num_exits
+#
+#     def __call__(self, exit_outs, gt_ys, loss_dict={}):
+#         """
+#         :param exit_outs: Dictionary mapping exit to CAMs, assumes they are ordered sequentially
+#         :return:
+#         """
+#         running_logits = 0
+#         for exit_ix in range(self.num_exits):
+#             logits = exit_outs[f'E={exit_ix}, logits']
+#             running_logits += F.adaptive_avg_pool2d(cam, (1)).squeeze()
+#         _loss = F.cross_entropy(running_logits, gt_ys.squeeze())
+#         loss_dict[f'joint_ce'] = _loss
+#         return loss_dict
+
+
+# class ResMDCALoss(torch.nn.Module):
+#     def __init__(self, num_exits, detach_prev=False):
+#         super(ResMDCALoss, self).__init__()
+#         self.num_exits = num_exits
+#         self.detach_prev = detach_prev
+#
+#     def forward(self, exit_outs, target):
+#         running_logits = None
+#         loss_dict = {}
+#         for exit_ix in range(self.num_exits):
+#             cam = exit_outs[f'E={exit_ix}, cam']
+#             logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
+#             if running_logits is None:
+#                 running_logits = logits
+#             else:
+#                 if self.detach_prev:
+#                     running_logits = logits + running_logits.detach()
+#                 else:
+#                     running_logits = logits + running_logits
+#             # [batch, classes]
+#             loss = torch.tensor(0.0).cuda()
+#             batch, classes = running_logits.shape
+#             for c in range(classes):
+#                 avg_count = (target == c).float().mean()
+#                 avg_conf = torch.mean(running_logits[:, c])
+#                 loss += torch.abs(avg_conf - avg_count)
+#             denom = classes
+#             loss /= denom
+#             loss_dict[f'E={exit_ix}, residual_calibration'] = loss
+#         return loss_dict
+#
+#
+# class ResMDCADetachedLoss(ResMDCALoss):
+#     def __init__(self, num_exits):
+#         super(ResMDCADetachedLoss, self).__init__(num_exits, detach_prev=True)

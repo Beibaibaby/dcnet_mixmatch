@@ -12,7 +12,7 @@ from analysis.analyze_segmentation import SegmentationMetrics
 from utils.cam_utils import get_class_cams
 from netcal.presentation import ReliabilityDiagram
 import logging
-
+from netcal.metrics import ECE
 
 class BaseTrainer(pl.LightningModule):
     def __init__(self, config):
@@ -237,4 +237,6 @@ class CalibrationAnalysis():
         os.makedirs(save_dir, exist_ok=True)
 
         curr_conf = torch.softmax(self.logits.float(), dim=1).numpy()
-        diagram.plot(curr_conf, gt_ys, filename=os.path.join(save_dir, 'diagram.png'))
+        ece = ECE(bins).measure(curr_conf, gt_ys)
+        diagram.plot(curr_conf, gt_ys, filename=os.path.join(save_dir, 'diagram.png'), title_suffix=f' ECE={ece}')
+        return ece
