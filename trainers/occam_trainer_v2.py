@@ -64,8 +64,10 @@ class OccamTrainerV2(BaseTrainer):
         # Per-exit segmentation metrics
         for cls_type in ['gt', 'pred']:
             exit_to_class_cams = {}
+            exit_to_hid_norms = {}
 
             for exit_name in self.model.multi_exit.get_exit_names():
+                # Metric for CAM
                 metric_key = f'{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
 
                 if batch_idx == 0:
@@ -75,7 +77,20 @@ class OccamTrainerV2(BaseTrainer):
                 class_cams = get_class_cams_for_occam_nets(model_out[f"{exit_name}, cam"], classes)
                 getattr(self, metric_key).update(gt_masks, class_cams)
                 exit_to_class_cams[exit_name] = class_cams
+
+                if cls_type == 'gt':
+                    # Metric for hidden feature
+                    hid_metric_key = f'{exit_name}_{split}_{loader_key}_hid_segmentation_metrics'
+
+                    if batch_idx == 0:
+                        setattr(self, hid_metric_key, SegmentationMetrics())
+                    hid = model_out[f'{exit_name}, exit_in']
+                    hid = torch.norm(hid, dim=1)  # norm along channels dims
+                    getattr(self, hid_metric_key).update(gt_masks, hid)
+                    exit_to_hid_norms[exit_name] = hid
+
             self.save_heat_maps_step(batch_idx, batch, exit_to_class_cams, heat_map_suffix=f"_{cls_type}")
+            self.save_heat_maps_step(batch_idx, batch, exit_to_hid_norms, heat_map_suffix=f"_hid_norm")
 
     def save_heat_maps_step(self, batch_idx, batch, exit_to_heat_maps, heat_map_suffix=''):
         """
@@ -95,11 +110,18 @@ class OccamTrainerV2(BaseTrainer):
     def segmentation_metric_epoch_end(self, split, loader_key):
         for cls_type in ['gt', 'pred']:
             for exit_name in self.model.multi_exit.get_exit_names():
-                metric_key = f'{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
+                for metric_key in [f'{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics']:
+                    if hasattr(self, metric_key):
+                        seg_metric_vals = getattr(self, metric_key).summary()
+                        for sk in seg_metric_vals:
+                            self.log(f"{metric_key} {sk}", seg_metric_vals[sk])
+
+        for exit_name in self.model.multi_exit.get_exit_names():
+            for metric_key in [f'{exit_name}_{split}_{loader_key}_hid_segmentation_metrics']:
                 if hasattr(self, metric_key):
                     seg_metric_vals = getattr(self, metric_key).summary()
                     for sk in seg_metric_vals:
-                        self.log(f"{cls_type} {split} {loader_key} {exit_name} {sk}", seg_metric_vals[sk])
+                        self.log(f"{metric_key} {sk}", seg_metric_vals[sk])
 
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out['logits'], batch['y'], batch['class_name'], batch['group_name'])
