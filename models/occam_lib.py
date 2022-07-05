@@ -357,9 +357,9 @@ class MultiExitStats:
             # Accuracy on all the samples
             self.exit_ix_to_stats[exit_ix]['accuracy'].update(logits, gt_ys, class_names, group_names)
 
-            # for ee_name in exit_outs['early_exit_names']:
-            #     ee_ix = int(ee_name.split('E=')[1])
-            #     self.exit_ix_to_stats[exit_ix]['early_exit%'].update(int(ee_ix) == int(exit_ix))
+            for ee_name in exit_outs['early_exit_names']:
+                ee_ix = int(ee_name.split('E=')[1])
+                self.exit_ix_to_stats[exit_ix]['early_exit%'].update(int(ee_ix) == int(exit_ix))
 
     def summary(self, prefix=''):
         exit_to_summary = {}

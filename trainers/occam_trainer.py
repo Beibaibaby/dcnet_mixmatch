@@ -11,6 +11,7 @@ from utils.cam_utils import get_class_cams_for_occam_nets, get_early_exit_cams
 from utils.data_utils import inv_sigmoid
 from trainers.occam_trainer_v2 import CalibrationAnalysis
 
+
 class OccamTrainer(BaseTrainer):
     """
     Implementation for: OccamNets
@@ -99,7 +100,7 @@ class OccamTrainer(BaseTrainer):
         loader_keys = self.get_dataloader_keys(split)
         for loader_key in loader_keys:
             me_stats = getattr(self, f'{split}_{loader_key}_multi_exit_stats')
-            self.log_dict(me_stats.summary(prefix=f'{split} {loader_key} '), py_logging=False)
+            self.log_dict(me_stats.summary(prefix=f'{split} {loader_key} '))
 
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         if 'mask' not in batch:
@@ -163,6 +164,7 @@ class OccamTrainer(BaseTrainer):
 
     def init_calibration_analysis(self, split, loader_key):
         setattr(self, f'{split}_{loader_key}_calibration_analysis', CalibrationAnalysis(self.num_exits))
+
 
 class GateWeightedCELoss():
     def __init__(self, gamma0=3, gamma=1, eps=1e-5, offset=0.1):

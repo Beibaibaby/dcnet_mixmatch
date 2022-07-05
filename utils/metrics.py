@@ -113,6 +113,8 @@ class ExitPercent():
         self.total += 1
 
     def get_exit_pct(self, factor=100):
+        # if self.total == 0:
+        #     return 0
         return self.exited / self.total * factor
 
     def summary(self):
