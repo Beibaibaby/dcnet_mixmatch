@@ -6,7 +6,7 @@ dataset=coco_on_places
 optim=coco_on_places
 
 CUDA_VISIBLE_DEVICES=${GPU} python main.py \
-model.name=occam_resnet18_img64 \
+model.name=resnet18_img64 \
 trainer=base_trainer \
 dataset=${dataset} \
 optimizer=${optim}
