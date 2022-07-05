@@ -2,13 +2,10 @@ from trainers.base_trainer import *
 # from trainers.orig_group_dro_trainer import *
 # from trainers.group_dro_trainer import *
 # from trainers.group_upweighting_trainer import *
-# from trainers.spectral_decoupling_trainer import *
+from trainers.spectral_decoupling_trainer import *
 from trainers.pgi_trainer import *
 from trainers.occam_trainer import *
-# from trainers.occam_trainer_v2old import *
-# from trainers.not_occam_trainer_v2 import *
 from trainers.occam_trainer_v2 import *
-from trainers.label_smoothing_trainer import LabelSmoothingTrainer
 
 # from trainers.occam_trainer_lr_finder import *
 # from trainers.occam_group_upweighting_trainer import *

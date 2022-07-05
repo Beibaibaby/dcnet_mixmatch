@@ -77,12 +77,19 @@ class OccamTrainer(BaseTrainer):
         ###############################################################################################################
         # Compute gate-weighted CE Loss
         ###############################################################################################################
+        self.compute_main_loss(batch_idx, batch, model_out, logits, gt_ys, exit_ix, loss_dict)
+        gate_cfg = self.trainer_cfg.exit_gating
         loss_name = f"GateWeightedCELoss_{exit_ix}"
         if batch_idx == 0:
             setattr(self, loss_name, GateWeightedCELoss(gate_cfg.gamma0, gate_cfg.gamma, offset=gate_cfg.weight_offset))
         prev_gates = None if exit_ix == 0 else model_out[f"E={exit_ix - 1}, gates"]
-        loss_dict['ce'] = getattr(self, loss_name)(exit_ix, logits, prev_gates, gt_ys)
+        loss_dict['ce'] = getattr(self, loss_name)(exit_ix, logits, prev_gates, gt_ys,
+                                                   self.compute_main_loss(batch_idx, batch, model_out, logits, gt_ys,
+                                                                          exit_ix, loss_dict))
         return loss_dict
+
+    def compute_main_loss(self, batch_idx, batch, model_out, logits, gt_ys, exit_ix, loss_dict):
+        return F.cross_entropy(logits, gt_ys, reduction='none')
 
     def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None):
         if model_outputs is None:
@@ -174,7 +181,7 @@ class GateWeightedCELoss():
         self.offset = offset
         self.max_wt = 0  # stateful
 
-    def __call__(self, exit_ix, curr_logits, prev_gates, gt_ys):
+    def __call__(self, exit_ix, curr_logits, prev_gates, gt_ys, unweighted_loss):
         curr_gt_proba = F.softmax(curr_logits, dim=1).gather(1, gt_ys.squeeze().view(-1, 1)).squeeze()
         if exit_ix == 0:
             assert prev_gates is None
@@ -188,7 +195,7 @@ class GateWeightedCELoss():
             self.max_wt = curr_max_wt
 
         loss_wt = loss_wt / (self.max_wt + self.eps)
-        return (loss_wt + self.offset) * F.cross_entropy(curr_logits, gt_ys, reduction='none')
+        return (loss_wt + self.offset) * unweighted_loss
 
 
 class CAMSuppressionLoss():
