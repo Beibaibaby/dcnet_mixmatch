@@ -30,7 +30,7 @@ class OccamTrainer(BaseTrainer):
         for exit_ix in range(len(self.model.multi_exit.exit_block_nums)):
             _loss_dict = self.compute_losses(batch, batch_idx, model_out, exit_ix)
             for _k in _loss_dict:
-                self.log(f'{_k} E={exit_ix}', _loss_dict[_k].mean())
+                self.log(f'{_k} E={exit_ix}', _loss_dict[_k].mean(), py_logging=False)
                 loss += _loss_dict[_k].mean()
         return loss
 
@@ -99,7 +99,7 @@ class OccamTrainer(BaseTrainer):
         loader_keys = self.get_dataloader_keys(split)
         for loader_key in loader_keys:
             me_stats = getattr(self, f'{split}_{loader_key}_multi_exit_stats')
-            self.log_dict(me_stats.summary(prefix=f'{split} {loader_key} '))
+            self.log_dict(me_stats.summary(prefix=f'{split} {loader_key} '), py_logging=False)
 
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
         if 'mask' not in batch:
