@@ -83,7 +83,7 @@ class OccamTrainer(BaseTrainer):
         if batch_idx == 0:
             setattr(self, loss_name, GateWeightedCELoss(gate_cfg.gamma0, gate_cfg.gamma, offset=gate_cfg.weight_offset))
         prev_gates = None if exit_ix == 0 else model_out[f"E={exit_ix - 1}, gates"]
-        loss_dict['ce'] = getattr(self, loss_name)(exit_ix, logits, prev_gates, gt_ys,
+        loss_dict['main'] = getattr(self, loss_name)(exit_ix, logits, prev_gates, gt_ys,
                                                    self.compute_main_loss(batch_idx, batch, model_out, logits, gt_ys,
                                                                           exit_ix, loss_dict))
         return loss_dict

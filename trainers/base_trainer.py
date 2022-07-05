@@ -14,6 +14,7 @@ from netcal.presentation import ReliabilityDiagram
 import logging
 from netcal.metrics import ECE
 
+
 class BaseTrainer(pl.LightningModule):
     def __init__(self, config):
         super().__init__()
@@ -213,6 +214,9 @@ class BaseTrainer(pl.LightningModule):
             )
         if py_logging:
             logging.getLogger().info(json.dumps(dictionary, indent=4, sort_keys=True, default=str))
+
+    def set_train_loader(self, loader):
+        self.train_loader = loader
 
 
 class CalibrationAnalysis():
