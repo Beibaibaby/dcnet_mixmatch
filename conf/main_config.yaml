@@ -5,18 +5,11 @@ defaults:
   - trainer: base_trainer
   - override task: train
 cuda: True
-checkpoint_epoch: 0
 checkpoint_path: null
-load_model_only: false
-strict_load_mode: True
 data_split: 'test'
 data_sub_split: 'test'
 gpus: 1
-#calibration_split: 'Val'
 test_only_epoch: ${optimizer.epochs}
-#test_time_transformation_types: null
 hydra:
   run:
     dir: ${paths.root}/occam-networks-outputs/${dataset.name}/${trainer.alias}/${model.name}/${expt_suffix}
-#  sweep:
-#    dir: ${paths.root}/occam-networks-outputs/${dataset.name}/${trainer.name}/${model.name}

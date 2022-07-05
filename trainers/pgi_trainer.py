@@ -31,8 +31,8 @@ class PGITrainer(BaseTrainer):
             self.manual_backward(inv_loss, retain_graph=True, inputs=self.non_exit_layers)
         self.manual_backward(main_loss)
         opt.step()
-        self.log('loss', main_loss, on_epoch=True, batch_size=self.config.dataset.batch_size)
-        self.log('inv_loss', inv_loss, on_epoch=True, batch_size=self.config.dataset.batch_size)
+        self.log('loss', main_loss, on_epoch=True, batch_size=self.config.dataset.batch_size, py_logging=False)
+        self.log('inv_loss', inv_loss, on_epoch=True, batch_size=self.config.dataset.batch_size, py_logging=False)
 
     def calc_invariance_loss(self, logits, gt_ys, batch, iter, eps=1e-12):
         unq_ys = torch.unique(gt_ys)

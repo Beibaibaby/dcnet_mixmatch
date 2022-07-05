@@ -17,11 +17,3 @@ lr_scheduler:
   type: null
 temperature: 1.0
 grad_clip: null
-#use_agc: False
-#agc_ignore_layers: ['fc']
-agc:
-  enabled: False
-  eps: 1e-3
-  clip_val: 1e-2
-centralize_gradient: False
-normalize_gradient: False

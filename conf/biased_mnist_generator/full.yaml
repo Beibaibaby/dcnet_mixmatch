@@ -26,8 +26,5 @@ bias_config:
   letter_color:
     enabled: True
     p_bias: 0.9
-#  natural_texture:
-#    enabled: False
-#    p_bias: 0
   num_cells: 5
   class_imbalance_ratio: null

@@ -27,7 +27,7 @@ CLASSES = [
 
 
 class CocoOnPlacesDataset(BaseDataset):
-    def __init__(self, data_dir='/home/robik/datasets/coco_on_places_with_mask',
+    def __init__(self, data_dir='/home/robik/datasets/coco_on_places',
                  split='valsgtest',
                  transform=transforms.Compose([
                      transforms.Resize(64),

@@ -4,6 +4,7 @@ import logging
 import torch
 import torchvision.transforms.functional as tF
 
+
 def _build_transformation(aug_type, aug_cfg):
     if '_' in aug_type:
         aug_type = aug_type.split("_")[0]
@@ -66,6 +67,7 @@ def build_transformation_list(augmentation_cfg=None, image_size=None):
     return single_list, joint_list
 
 
+# Creating extra augmentation classes such that image + mask are applied the same augmentations
 class JointRandomHorizontalFlip(RandomHorizontalFlip):
     """
     Applies identical horizontal flips to all the images. Assumes all images have the same size.
