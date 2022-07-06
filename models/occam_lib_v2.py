@@ -262,17 +262,19 @@ class MultiExitPoE(MultiExitModule):
         running_cams, running_logits = None, None
         for exit_ix in range(len(self.exit_block_nums)):
             cams, logits = exit_outs[f"E={exit_ix}, cam"], exit_outs[f"E={exit_ix}, logits"]
-            if running_logits is None:
-                running_cams, running_logits = cams, logits
-            else:
-                _, _, h, w = cams.shape
-                # print(f"running = {running_cams.shape}, cams = {cams.shape}")
-                running_cams = interpolate(running_cams.detach(), h, w) + cams if self.detach_prev else interpolate(
-                    running_cams, h, w) + cams
-                running_logits = running_logits.detach() + logits if self.detach_prev else running_logits + logits
+            running_cams, running_logits = self.update_running_vals(cams, logits, running_cams, running_logits)
             exit_outs[f"E={exit_ix}, cam"] = running_cams
             exit_outs[f"E={exit_ix}, logits"] = running_logits
         return exit_outs
+
+    def update_running_vals(self, cams, logits, running_cams, running_logits):
+        if running_logits is None:
+            return cams, logits
+        _, _, h, w = cams.shape
+        running_cams = interpolate(running_cams.detach(), h, w) + cams if self.detach_prev else interpolate(
+            running_cams, h, w) + cams
+        running_logits = running_logits.detach() + logits if self.detach_prev else running_logits + logits
+        return running_cams, running_logits
 
 
 class MultiExitPoEDetachPrev(MultiExitPoE):

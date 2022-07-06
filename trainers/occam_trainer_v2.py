@@ -188,16 +188,16 @@ class CalibrationAnalysis():
         for exit_ix in range(self.num_exits):
             cam = exit_outs[f'E={exit_ix}, cam']
             logits = F.adaptive_avg_pool2d(cam, (1)).squeeze().detach().cpu()
-            overall_logits += logits
+            # overall_logits += logits
 
             if f'E={exit_ix}' not in self.exit_ix_to_logits:
                 self.exit_ix_to_logits[f'E={exit_ix}'] = logits
-                self.exit_ix_to_logits[f'sum_upto_E={exit_ix}'] = overall_logits
+                # self.exit_ix_to_logits[f'sum_upto_E={exit_ix}'] = overall_logits
             else:
                 self.exit_ix_to_logits[f'E={exit_ix}'] = torch.cat([self.exit_ix_to_logits[f'E={exit_ix}'], logits],
                                                                    dim=0)
-                self.exit_ix_to_logits[f'sum_upto_E={exit_ix}'] = torch.cat(
-                    [self.exit_ix_to_logits[f'sum_upto_E={exit_ix}'], overall_logits], dim=0)
+                # self.exit_ix_to_logits[f'sum_upto_E={exit_ix}'] = torch.cat(
+                #     [self.exit_ix_to_logits[f'sum_upto_E={exit_ix}'], overall_logits], dim=0)
 
         if self.gt_ys is None:
             self.gt_ys = batch['y'].detach().cpu().squeeze()

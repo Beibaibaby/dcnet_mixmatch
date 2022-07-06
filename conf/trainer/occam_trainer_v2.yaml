@@ -1,9 +1,0 @@
-defaults:
-  - base_trainer
-name: OccamTrainerV2
-smooth_exit:
-  start_epoch: 0
-  smoothing: 0.1
-main_loss: JointCELoss
-calibration_loss: null
-calibration_loss_wt: 1.0
