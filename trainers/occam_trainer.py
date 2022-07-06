@@ -77,7 +77,7 @@ class OccamTrainer(BaseTrainer):
         ###############################################################################################################
         # Compute gate-weighted CE Loss
         ###############################################################################################################
-        self.compute_main_loss(batch_idx, batch, model_out, logits, gt_ys, exit_ix, loss_dict)
+        # self.compute_main_loss(batch_idx, batch, model_out, logits, gt_ys, exit_ix, loss_dict)
         gate_cfg = self.trainer_cfg.exit_gating
         loss_name = f"GateWeightedCELoss_{exit_ix}"
         if batch_idx == 0:
