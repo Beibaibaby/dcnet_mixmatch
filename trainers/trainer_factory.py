@@ -1,7 +1,8 @@
 from trainers.base_trainer import *
 from trainers.group_upweighting_trainer import *
 from trainers.spectral_decoupling_trainer import *
-from trainers.pgi_trainer import *
+# from trainers.pgi_trainer import *
+from trainers.pgi_trainer_v2 import *
 from trainers.occam_trainer import *
 from trainers.occam_trainer_v2 import *
 

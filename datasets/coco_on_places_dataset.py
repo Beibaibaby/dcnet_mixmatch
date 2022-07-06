@@ -134,8 +134,8 @@ def create_coco_on_places_dataset_for_split(dataset_cfg, split):
 
 def create_coco_on_places_datasets(dataset_cfg):
     split_to_dataset = {'Test': {}}
-    eval_splits = ['idtest', 'validtest', 'oodtest', 'valoodtest', 'sgtest', 'valsgtest', 'anotest']
-    eval_aliases = ['In Distribution', 'validtest', 'oodtest', 'valoodtest', 'Test', 'Val', 'Anomaly Detection']
+    eval_splits = ['train', 'idtest', 'validtest', 'oodtest', 'valoodtest', 'sgtest', 'valsgtest', 'anotest']
+    eval_aliases = ['Train', 'In Distribution', 'validtest', 'oodtest', 'valoodtest', 'Test', 'Val', 'Anomaly Detection']
     for eval_split, eval_alias in zip(eval_splits, eval_aliases):
         split_to_dataset['Test'][eval_alias] = create_coco_on_places_dataset_for_split(dataset_cfg, eval_split)
     split_to_dataset['Train'] = create_coco_on_places_dataset_for_split(dataset_cfg, 'train')
@@ -166,7 +166,7 @@ def create_coco_on_places_dataloaders(config):
     out = {'val': {}, 'test': {}}
     out['train'] = create_coco_on_places_dataloader_for_split(config.dataset, 'train')
 
-    eval_splits = ['validtest', 'valoodtest', 'valsgtest']
+    eval_splits = ['train', 'validtest', 'valoodtest', 'valsgtest']
     for split in eval_splits:
         out['val'][split] = create_coco_on_places_dataloader_for_split(config.dataset, split)
 
