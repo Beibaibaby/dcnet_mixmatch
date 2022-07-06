@@ -20,16 +20,14 @@ def get_group_weights(loader, group_by, gamma):
             total_samples += 1
     for group_ix in group_ix_to_cnt:
         group_ix_to_weight[group_ix] = (1 / group_ix_to_cnt[group_ix]) ** gamma
-        logging.getLogger().debug(f"group_ix_to_weight")
-        logging.getLogger().debug(group_ix_to_weight)
-    return group_ix_to_cnt, group_ix_to_weight
+    return group_ix_to_weight
 
 
-def compute_group_upweighting_loss(batch, logits, group_by, group_ix_to_weight, device):
-    main_loss = F.cross_entropy(logits, batch['y'].squeeze(), reduction='none')
-    weights = torch.FloatTensor([group_ix_to_weight[int(group_ix)] for group_ix in batch[group_by]]).to(device)
-    # Multiply per-sample losses by weights for the corresponding groups
-    loss = weights * main_loss
+def compute_group_upweighting_loss(batch, batch_idx, logits, group_by, group_ix_to_weight):
+    unweighted_loss = F.cross_entropy(logits, batch['y'].squeeze(), reduction='none')
+    weights = torch.FloatTensor([group_ix_to_weight[int(group_ix)] for group_ix in batch[group_by]]).to(
+        batch['x'].device)
+    loss = weights * unweighted_loss
     return loss
 
 
@@ -40,15 +38,13 @@ class GroupUpweightingTrainer(BaseTrainer):
     Paper that investigated underparameterization with upweighting method: https://arxiv.org/abs/2005.04345
     """
 
-    def training_step(self, batch, batch_idx):
+    def compute_main_loss(self, batch, batch_idx, model_out):
         if not hasattr(self, 'group_ix_to_weight'):
-            grp_ix_to_cnt, group_ix_to_weight = get_group_weights(self.train_loader,
-                                                                  group_by=self.trainer_cfg.group_by,
-                                                                  gamma=self.trainer_cfg.gamma)
-            self.group_ix_to_weight = group_ix_to_weight
-        logits = self(batch['x'])
-        loss = compute_group_upweighting_loss(batch, logits, self.trainer_cfg.group_by, self.group_ix_to_weight,
-                                              self.device)
+            self.group_ix_to_weight = get_group_weights(self.train_loader,
+                                                        group_by=self.trainer_cfg.group_by,
+                                                        gamma=self.trainer_cfg.gamma)
+        loss = compute_group_upweighting_loss(batch, batch_idx, model_out, self.trainer_cfg.group_by,
+                                              self.group_ix_to_weight)
         return loss.mean()
 
 
@@ -59,12 +55,12 @@ class OccamGroupUpweightingTrainer(OccamTrainer):
     Paper that investigated underparameterization with upweighting method: https://arxiv.org/abs/2005.04345
     """
 
-    def compute_main_loss(self, batch_idx, batch, model_out, logits, gt_ys, exit_ix, loss_dict):
+    def compute_main_loss(self, batch, batch_idx, model_out, exit_ix):
         if not hasattr(self, 'group_ix_to_weight'):
-            grp_ix_to_cnt, group_ix_to_weight = get_group_weights(self.train_loader,
-                                                                  group_by=self.trainer_cfg.group_by,
-                                                                  gamma=self.trainer_cfg.gamma)
-            self.group_ix_to_weight = group_ix_to_weight
-        loss = compute_group_upweighting_loss(batch, logits, self.trainer_cfg.group_by, self.group_ix_to_weight,
-                                              self.device)
+            self.group_ix_to_weight = get_group_weights(self.train_loader,
+                                                        group_by=self.trainer_cfg.group_by,
+                                                        gamma=self.trainer_cfg.gamma)
+        loss = compute_group_upweighting_loss(batch, batch_idx, model_out[f'E={exit_ix}, logits'],
+                                              self.trainer_cfg.group_by,
+                                              self.group_ix_to_weight)
         return loss

@@ -34,8 +34,8 @@ class BaseTrainer(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop. It is independent of forward
-        logits = self(batch['x'], batch)
-        loss = self.compute_loss(logits, batch['y'])
+        model_out = self(batch['x'], batch)
+        loss = self.compute_main_loss(batch, batch_idx, model_out)
         self.log('loss', loss, on_epoch=True, batch_size=self.config.dataset.batch_size, py_logging=False)
         return loss
 
@@ -91,8 +91,8 @@ class BaseTrainer(pl.LightningModule):
         return {'optimizer': optimizer,
                 'lr_scheduler': lr_scheduler}
 
-    def compute_loss(self, logits, y):
-        return F.cross_entropy(logits, y.squeeze())
+    def compute_main_loss(self, batch, batch_idx, model_out):
+        return F.cross_entropy(model_out, batch['y'].squeeze())
 
     def set_dataloader_keys(self, split, keys):
         setattr(self, f'{split}_dataloader_keys', keys)

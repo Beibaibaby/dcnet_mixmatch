@@ -22,7 +22,7 @@ class PGITrainer(BaseTrainer):
 
     def training_step(self, batch, batch_idx):
         logits = self(batch['x'])
-        main_loss = self.compute_loss(logits, batch['y'])
+        main_loss = self.compute_main_loss(logits, batch['y'])
         iter = self.current_epoch * self.iters_per_epoch + batch_idx + 1
         inv_loss = self.calc_invariance_loss(logits, batch['y'], batch, iter)
         opt = self.optimizers()
