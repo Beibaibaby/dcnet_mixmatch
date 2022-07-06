@@ -86,3 +86,7 @@ class PGITrainer(BaseTrainer):
                 non_exit_layers.append(p)
 
         return non_exit_layers
+
+    def on_epoch_end(self):
+        super().on_epoch_end()
+        self.lr_schedulers().step()

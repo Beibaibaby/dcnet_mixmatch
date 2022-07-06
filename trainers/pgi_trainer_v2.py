@@ -21,7 +21,6 @@ class PGITrainer(BaseTrainer):
         self.automatic_optimization = False
         self.total_inv_loss = []
         self.iteration = 0
-
         omit_key = 'fc'
         non_exit_layers = []
         for n, p in self.model.named_parameters():
@@ -70,18 +69,18 @@ class PGITrainer(BaseTrainer):
         return inv_loss
 
     def training_step(self, batch, batch_idx):
-        model_out = self(batch['x'])
+        model_out = self(batch['x'], batch)
         main_loss = F.cross_entropy(model_out, batch['y'].squeeze())
-        invariance_loss = self.calc_invariance_loss(batch, batch_idx, model_out, batch['y'].squeeze())
+        # invariance_loss = self.calc_invariance_loss(batch, batch_idx, model_out, batch['y'].squeeze())
+        self.log('main', main_loss.mean(), on_epoch=True, py_logging=False)
+        # self.log('inv', invariance_loss.mean(), on_epoch=True, py_logging=False)
 
         opt = self.optimizers()
         opt.zero_grad()
-        self.manual_backward(invariance_loss, retain_graph=True, inputs=self.non_exit_layers)
+        # self.manual_backward(invariance_loss, retain_graph=True, inputs=self.non_exit_layers)
         self.manual_backward(main_loss)
         # invariance_loss.mean().backward(inputs=self.non_exit_layers)
         # main_loss.mean().backward()
 
         opt.step()
-        self.log('main', main_loss.mean(), py_logging=False)
-        self.log('inv', invariance_loss.mean(), py_logging=False)
         self.iteration += 1
