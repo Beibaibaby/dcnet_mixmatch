@@ -91,69 +91,66 @@ def occam_resnet18_v2(num_classes, width=58, multi_exit_type=MultiExitModule, ex
                          exits_kwargs=exits_kwargs)
 
 
-def occam_resnet18_v2_poe(num_classes):
-    return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoE)
+# def occam_resnet18_v2_poe(num_classes):
+#     return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoE)
+#
+#
+# def occam_resnet18_v2_poe_detach_prev(num_classes):
+#     return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoEDetachPrev)
 
 
-def occam_resnet18_v2_poe_detach_prev(num_classes):
-    return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoEDetachPrev)
+# def occam_resnet18_v2_poe_depthwise_same_widths(num_classes, kernel_sizes, exit_strides, exit_padding):
+#     return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoE,
+#                              exits_kwargs={
+#                                  'exit_initial_conv_type': DepthWiseConv2,
+#                                  'exit_kernel_sizes': kernel_sizes,
+#                                  'exit_strides': exit_strides,
+#                                  'exit_width_factors': [1] * 4,
+#                                  'cam_width_factors': [1] * 4,
+#                                  'exit_padding': exit_padding
+#                              })
+#
 
-
-def occam_resnet18_v2_poe_depthwise_same_widths(num_classes, kernel_sizes, exit_strides, exit_padding):
-    return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoE,
+def occam_resnet18_v2_depthwise9_generic(num_classes,
+                                         multi_exit_type,
+                                         kernel_sizes=[9, 7, 5, 3],
+                                         exit_strides=[9, 7, 5, 3],
+                                         exit_padding=[5, 4, 3, 2],
+                                         exit_width_factors=[1] * 4,
+                                         cam_width_factors=[1] * 4):
+    return occam_resnet18_v2(num_classes, multi_exit_type=multi_exit_type,
                              exits_kwargs={
                                  'exit_initial_conv_type': DepthWiseConv2,
                                  'exit_kernel_sizes': kernel_sizes,
                                  'exit_strides': exit_strides,
-                                 'exit_width_factors': [1] * 4,
-                                 'cam_width_factors': [1] * 4,
+                                 'exit_width_factors': exit_width_factors,
+                                 'cam_width_factors': cam_width_factors,
                                  'exit_padding': exit_padding
                              })
 
 
-def occam_resnet18_v2_poe_depthwise(num_classes, kernel_sizes, exit_strides, exit_padding):
-    return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoE,
-                             exits_kwargs={
-                                 'exit_initial_conv_type': DepthWiseConv2,
-                                 'exit_kernel_sizes': kernel_sizes,
-                                 'exit_strides': exit_strides,
-                                 'exit_width_factors': [8, 4, 2, 1],
-                                 'cam_width_factors': [8, 4, 2, 1],
-                                 'exit_padding': exit_padding
-                             })
+def occam_resnet18_v2_depthwise9_poe_same_width(num_classes):
+    return occam_resnet18_v2_depthwise9_generic(
+        num_classes=num_classes,
+        multi_exit_type=MultiExitPoE,
+        exit_width_factors=[8, 4, 2, 1],
+        cam_width_factors=[8, 4, 2, 1])
 
 
-def occam_resnet18_v2_poe_detach_prev_depthwise(num_classes, kernel_sizes, exit_strides, exit_padding):
-    return occam_resnet18_v2(num_classes, multi_exit_type=MultiExitPoEDetachPrev,
-                             exits_kwargs={
-                                 'exit_initial_conv_type': DepthWiseConv2,
-                                 'exit_kernel_sizes': kernel_sizes,
-                                 'exit_strides': exit_strides,
-                                 'exit_width_factors': [8, 4, 2, 1],
-                                 'cam_width_factors': [8, 4, 2, 1],
-                                 'exit_padding': exit_padding
-                             })
+def occam_resnet18_v2_depthwise9_poe(num_classes):
+    return occam_resnet18_v2_depthwise9_generic(num_classes=num_classes, multi_exit_type=MultiExitPoE)
 
 
-def occam_resnet18_v2_poe_detach_prev_depthwise9(num_classes):
-    return occam_resnet18_v2_poe_detach_prev_depthwise(num_classes,
-                                                       kernel_sizes=[9, 7, 5, 3],
-                                                       exit_strides=[9, 7, 5, 3],
-                                                       exit_padding=[5, 4, 3, 2])
+def occam_resnet18_v2_depthwise9(num_classes):
+    return occam_resnet18_v2_depthwise9_generic(num_classes=num_classes, multi_exit_type=MultiExitModule)
 
 
-def occam_resnet18_v2_poe_depthwise9(num_classes):
-    return occam_resnet18_v2_poe_depthwise(num_classes,
-                                           kernel_sizes=[9, 7, 5, 3],
-                                           exit_strides=[9, 7, 5, 3],
-                                           exit_padding=[5, 4, 3, 2])
-
-
-def occam_resnet18_v2_poe_depthwise9_same_widths(num_classes):
-    return occam_resnet18_v2_poe_depthwise_same_widths(num_classes,
-                                                       kernel_sizes=[9, 7, 5, 3],
-                                                       exit_strides=[9, 7, 5, 3],
-                                                       exit_padding=[5, 4, 3, 2])
+def occam_resnet18_v2_depthwise9_same_width(num_classes):
+    return occam_resnet18_v2_depthwise9_generic(num_classes=num_classes,
+                                                multi_exit_type=MultiExitModule,
+                                                exit_width_factors=[8, 4, 2, 1],
+                                                cam_width_factors=[8, 4, 2, 1]
+                                                )
 
 
 # def occam_resnet18_v2_poe_detach_prev_depthwise_k_all_3(num_classes):

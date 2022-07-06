@@ -9,7 +9,8 @@ subset_percent=16
 precision=16
 
 for calibration_loss_wt in 1; do
-  for model in occam_resnet18_v2_poe_depthwise9_same_widths occam_resnet18_v2_poe_depthwise9; do
+  for model in occam_resnet18_v2_depthwise9 occam_resnet18_v2_depthwise9_poe occam_resnet18_v2_depthwise9_poe_same_width occam_resnet18_v2_depthwise9_same_width; do
+#  for model in occam_resnet18_v2_depthwise9_same_width; do
     for main_loss in CELoss; do
       for calibration_loss in MDCALoss; do
         CUDA_VISIBLE_DEVICES=${GPU} python main.py \
