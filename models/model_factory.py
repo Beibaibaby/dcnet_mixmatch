@@ -1,19 +1,11 @@
 import logging
-# from models import *
 from models.variable_width_resnet import *
 from models.occam_resnet import *
-# from models.pretrained_resnet import pretrained_resnet18
-# from models.occam_densenet import *
+from models.occam_densenet import *
 # from torchvision.models.efficientnet import *
 # from models.occam_efficient_net import *
-# from torchvision.models.mobilenet import *
-# from models.occam_mobile_net import *
-# from models.resnet_group_norm import *
-# from models.occam_resnet_shared_exit import *
-# from models.occam_resnet_not_v2 import *
-# from models.var_block_occam_resnet_v2 import *
-# from models.occam_resnet_v2_transpose import *
-# from models.occam_resnet_v2_same_dim import  *
+from torchvision.models.mobilenet import *
+from models.occam_mobile_net import *
 from models.occam_resnet_v2 import *
 
 

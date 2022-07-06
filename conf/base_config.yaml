@@ -7,8 +7,5 @@ paths:
   root: /home/robik
 
 expt_suffix: ''
-expt_name: null #${dataset.name}${dataset.trainval_sub_dir}_predict_${dataset.target_name}_${trainer.name}_${model.name}_${seed}${expt_suffix}
 expt_dir: null #${dataset.name}${dataset.trainval_sub_dir}/predict_${dataset.target_name}/${trainer.name}/${model.name}_${seed}${expt_suffix}
-full_expt_dir: null #${paths.root}/occam-networks-outputs/${expt_dir}
-use_neptune: False
 seed: 1989

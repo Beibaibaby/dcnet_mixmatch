@@ -4,7 +4,7 @@ from typing import Any, Callable, List, Optional, Sequence
 from torchvision.models.mobilenetv3 import InvertedResidualConfig
 from torchvision.ops.misc import ConvNormActivation, SqueezeExcitation as SElayer
 from torchvision.models._utils import _make_divisible
-from models.multi_exit_networks import *
+from models.occam_lib import *
 
 
 class InvertedResidual(nn.Module):
