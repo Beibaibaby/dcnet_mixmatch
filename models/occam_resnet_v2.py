@@ -117,6 +117,15 @@ def occam_resnet18_v2_k9753(num_classes):
                                      exit_padding=[5, 4, 3, 2])
 
 
+def occam_resnet18_v2_k9753_same_width(num_classes):
+    return occam_resnet18_v2_generic(num_classes,
+                                     kernel_sizes=[9, 7, 5, 3],
+                                     exit_strides=[9, 7, 5, 3],
+                                     exit_padding=[5, 4, 3, 2],
+                                     exit_width_factors=[8, 4, 2, 1],
+                                     cam_width_factors=[8, 4, 2, 1])
+
+
 def occam_resnet18_v2_k3(num_classes):
     return occam_resnet18_v2_generic(num_classes)
 
