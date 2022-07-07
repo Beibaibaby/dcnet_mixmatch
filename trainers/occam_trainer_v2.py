@@ -233,10 +233,10 @@ class ShapePriorLoss():
             cam = model_out[f'E={exit_ix}, cam']
             gt_cams = get_class_cams_for_occam_nets(cam, y).squeeze()
             gt_cams = gt_cams / gt_cams.max()
-
             exit_in_norm = torch.norm(model_out[f'E={exit_ix}, exit_in'], dim=1).squeeze()
-            exit_in_norm = interpolate(exit_in_norm, gt_cams.shape[1], gt_cams.shape[2])
-            loss_dict[f'E={exit_ix}, shape_prior'] = F.mse_loss(exit_in_norm, gt_cams.detach())
+            exit_in_norm = interpolate(exit_in_norm, gt_cams.shape[1], gt_cams.shape[2]).squeeze()
+            loss = F.mse_loss(exit_in_norm, gt_cams.detach()).squeeze()
+            loss_dict[f'E={exit_ix}, shape_prior'] = loss
         return loss_dict
 
 # class JointCELoss():

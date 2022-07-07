@@ -1,16 +1,16 @@
 #!/bin/bash
 source activate occamnets
 
-GPU=1
+GPU=0
 
 dataset=image_net
 optim=image_net
 subset_percent=16
 precision=16
 
-for shape_prior_loss_wt in 0.1 0.01 1; do
+for shape_prior_loss_wt in 0.01 0.1 1; do
   for calibration_loss_wt in 1; do
-    for model in occam_resnet18_v2_depthwise9; do
+    for model in occam_resnet18_v2_k3; do
       for main_loss in CELoss; do
         for calibration_loss in MDCALoss; do
           CUDA_VISIBLE_DEVICES=${GPU} python main.py \
