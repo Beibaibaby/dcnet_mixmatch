@@ -130,6 +130,10 @@ def occam_resnet18_v2_k3(num_classes):
     return occam_resnet18_v2_generic(num_classes)
 
 
+def occam_resnet18_v2_k3_poe(num_classes):
+    return occam_resnet18_v2_generic(num_classes, multi_exit_type=MultiExitPoE)
+
+
 def occam_resnet18_v2_depthwise9_generic(num_classes,
                                          multi_exit_type,
                                          kernel_sizes=[9, 7, 5, 3],

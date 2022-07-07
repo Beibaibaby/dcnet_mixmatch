@@ -283,22 +283,21 @@ class MultiExitPoE(MultiExitModule):
 
     def forward(self, block_num_to_exit_in, y=None):
         exit_outs = super().forward(block_num_to_exit_in)
-        running_cams, running_logits = None, None
+        running_cams = None
         for exit_ix in range(len(self.exit_block_nums)):
-            cams, logits = exit_outs[f"E={exit_ix}, cam"], exit_outs[f"E={exit_ix}, logits"]
-            running_cams, running_logits = self.update_running_vals(cams, logits, running_cams, running_logits)
+            cams = exit_outs[f"E={exit_ix}, cam"]
+            running_cams = self.update_running_vals(cams, running_cams)
             exit_outs[f"E={exit_ix}, cam"] = running_cams
-            exit_outs[f"E={exit_ix}, logits"] = running_logits
+            exit_outs[f"E={exit_ix}, logits"] = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
         return exit_outs
 
-    def update_running_vals(self, cams, logits, running_cams, running_logits):
-        if running_logits is None:
-            return cams, logits
+    def update_running_vals(self, cams, running_cams):
+        if running_cams is None:
+            return cams
         _, _, h, w = cams.shape
         running_cams = interpolate(running_cams.detach(), h, w) + cams if self.detach_prev else interpolate(
             running_cams, h, w) + cams
-        running_logits = running_logits.detach() + logits if self.detach_prev else running_logits + logits
-        return running_cams, running_logits
+        return running_cams
 
 
 class MultiExitPoEDetachPrev(MultiExitPoE):
