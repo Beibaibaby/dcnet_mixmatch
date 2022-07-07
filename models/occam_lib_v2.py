@@ -31,6 +31,30 @@ def build_non_linearity(non_linearity_type, num_features):
 #         x = self.conv2(x)
 #         return x
 
+class Conv2(nn.Module):
+    def __init__(self, in_features, hid_features, out_features, norm_type=nn.BatchNorm2d, non_linearity_type=nn.ReLU,
+                 conv_type=nn.Conv2d, kernel_size=3, stride=None, padding=None):
+        super(Conv2, self).__init__()
+        if stride is None:
+            stride = 1
+        self.conv1 = conv_type(in_channels=in_features, out_channels=hid_features, kernel_size=kernel_size,
+                               stride=stride,
+                               padding=padding,
+                               groups=1)
+        self.norm1 = norm_type(hid_features)
+        self.non_linear1 = build_non_linearity(non_linearity_type, hid_features)
+        self.conv2 = nn.Conv2d(in_channels=hid_features, out_channels=out_features, kernel_size=3,
+                               stride=1,
+                               padding=1,
+                               groups=1)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.norm1(x)
+        x = self.non_linear1(x)
+        x = self.conv2(x)
+        return x
+
 
 class DepthWiseConv2(nn.Module):
     def __init__(self, in_features, hid_features, out_features, norm_type=nn.BatchNorm2d, non_linearity_type=nn.ReLU,
@@ -67,7 +91,7 @@ class ExitModule(nn.Module):
                  groups=1,
                  kernel_size=3,
                  stride=None,
-                 initial_conv_type=DepthWiseConv2,
+                 initial_conv_type=None,
                  conv_bias=False,
                  conv_type=nn.Conv2d,
                  norm_type=nn.BatchNorm2d,
@@ -142,7 +166,7 @@ class MultiExitModule(nn.Module):
             exit_out_dims=None,
             exit_block_nums=[0, 1, 2, 3],
             exit_type=ExitModule,
-            exit_initial_conv_type=DepthWiseConv2,
+            exit_initial_conv_type=None,
             exit_hid_dims=[None] * 4,
             exit_width_factors=[1 / 4] * 4,
             cam_width_factors=[1] * 4,
