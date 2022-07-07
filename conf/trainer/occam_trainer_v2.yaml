@@ -1,0 +1,7 @@
+defaults:
+  - base_trainer
+name: OccamTrainerV2
+main_loss: CELoss
+calibration_loss: MDCALoss
+calibration_loss_wt: 1.0
+shape_prior_loss_wt: 0

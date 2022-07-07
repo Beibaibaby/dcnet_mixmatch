@@ -45,7 +45,7 @@ data_sub_split='val_mask' \
 #
 #CUDA_VISIBLE_DEVICES=${GPU} python main.py \
 #model.name=occam_resnet18_v2 \
-#trainer=occam_trainer_v2 \
+#trainer=occam_trainer_v2.yaml \
 #trainer.precision=${precision} \
 #dataset=${dataset} \
 #dataset.subset_percent=${subset_percent} \

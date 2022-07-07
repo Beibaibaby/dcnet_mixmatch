@@ -7,6 +7,7 @@ from analysis.analyze_segmentation import SegmentationMetrics, save_exitwise_hea
 from utils.cam_utils import get_class_cams_for_occam_nets
 from netcal.presentation import ReliabilityDiagram
 from netcal.metrics import ECE
+from utils.cam_utils import interpolate
 
 
 class OccamTrainerV2(BaseTrainer):
@@ -33,6 +34,12 @@ class OccamTrainerV2(BaseTrainer):
             for cl in cal_loss_dict:
                 loss += self.trainer_cfg.calibration_loss_wt * cal_loss_dict[cl]
             self.log_dict(cal_loss_dict, py_logging=False)
+
+        if self.trainer_cfg.shape_prior_loss_wt > 0:
+            sp_loss_dict = ShapePriorLoss(self.num_exits)(model_out, batch['y'])
+            for k in sp_loss_dict:
+                loss += self.trainer_cfg.shape_prior_loss_wt * sp_loss_dict[k]
+            self.log_dict(sp_loss_dict, py_logging=False)
 
         return loss
 
@@ -214,6 +221,23 @@ class CalibrationAnalysis():
             ece = ECE(bins).measure(curr_conf, gt_ys)
             diagram.plot(curr_conf, gt_ys, filename=os.path.join(save_dir, f'{exit_ix}.png'),
                          title_suffix=f' ECE={ece}')
+
+
+class ShapePriorLoss():
+    def __init__(self, num_exits):
+        self.num_exits = num_exits
+
+    def __call__(self, model_out, y):
+        loss_dict = {}
+        for exit_ix in range(self.num_exits):
+            cam = model_out[f'E={exit_ix}, cam']
+            gt_cams = get_class_cams_for_occam_nets(cam, y).squeeze()
+            gt_cams = gt_cams / gt_cams.max()
+
+            exit_in_norm = torch.norm(model_out[f'E={exit_ix}, exit_in'], dim=1).squeeze()
+            exit_in_norm = interpolate(exit_in_norm, gt_cams.shape[1], gt_cams.shape[2])
+            loss_dict[f'E={exit_ix}, shape_prior'] = F.mse_loss(exit_in_norm, gt_cams.detach())
+        return loss_dict
 
 # class JointCELoss():
 #     def __init__(self, num_exits):
