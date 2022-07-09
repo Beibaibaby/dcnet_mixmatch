@@ -222,7 +222,6 @@ class MultiExitModule(nn.Module):
 
     def get_exit_names(self):
         names = [f'E={exit_ix}' for exit_ix in range(len(self.exit_block_nums))]
-        # names.append('')
         return names
 
     def get_exit_block_nums(self):
@@ -305,6 +304,59 @@ class MultiExitPoE(MultiExitModule):
         return running_cams
 
 
+class MultiExitPoEDetachPrev(MultiExitPoE):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.detach_prev = True
+
+
+class MultiExitPoEDetachNormalizePrev(MultiExitPoE):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.detach_prev = True
+        self.normalize_cams = True
+
+
+class WeightedPoE(MultiExitModule):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.detach_prev = True
+        self.normalize_cams = False
+
+    def forward(self, block_num_to_exit_in, y=None):
+        exit_outs = super().forward(block_num_to_exit_in)
+        running_cams = None
+        if self.training:
+            assert y is not None
+        for exit_ix in range(len(self.exit_block_nums)):
+            cams = exit_outs[f"E={exit_ix}, cam"]
+            running_cams = self.update_running_vals(cams, running_cams, y)
+            exit_outs[f"E={exit_ix}, cam"] = running_cams
+            exit_outs[f"E={exit_ix}, logits"] = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
+            exit_outs[f"logits"] = exit_outs[f"E={exit_ix}, logits"]
+        return exit_outs
+
+    def update_running_vals(self, cams, running_cams, y=None):
+        if self.normalize_cams:
+            cams = normalize(cams)
+        if running_cams is None:
+            return cams
+        _, _, h, w = cams.shape
+        if self.detach_prev:
+            running_cams = running_cams.detach()
+        running_logits = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
+        if self.training:
+            assert y is not None
+        else:
+            y = torch.argmax(running_logits, dim=1).squeeze().unsqueeze(1)
+        p = torch.gather(running_logits, dim=1, index=y).detach().unsqueeze(2).unsqueeze(3)
+        running_cams = p ** self.gamma * interpolate(running_cams, h, w) + cams
+        return running_cams
+
+    def set_gamma(self, gamma):
+        self.gamma = gamma
+
+
 def normalize(tensor, eps=1e-5):
     """
 
@@ -319,16 +371,3 @@ def normalize(tensor, eps=1e-5):
     mins = mins.unsqueeze(1).unsqueeze(2).unsqueeze(3)
     normalized = (tensor - mins) / (maxes - mins + eps)
     return normalized
-
-
-class MultiExitPoEDetachPrev(MultiExitPoE):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.detach_prev = True
-
-
-class MultiExitPoEDetachNormalizePrev(MultiExitPoE):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.detach_prev = True
-        self.normalize_cams = True

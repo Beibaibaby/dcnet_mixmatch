@@ -10,7 +10,9 @@ from models.occam_resnet_v2 import *
 
 
 def build_model(model_config):
-    if 'occam_resnet18_v2_obj_score' in model_config.name:
+    if 'weighted_poe' in model_config.name:
+        m = eval(model_config.name)(model_config.num_classes, model_config.gamma)
+    elif 'occam_resnet18_v2_obj_score' in model_config.name:
         m = eval(model_config.name)(model_config.num_classes, model_config.threshold_coeff)
     elif 'occam' in model_config.name:  # or 'resnet' in model_config.name:
         m = eval(model_config.name)(model_config.num_classes)

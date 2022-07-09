@@ -21,8 +21,11 @@ class OccamTrainerV2(BaseTrainer):
         assert hasattr(self.model, 'multi_exit')
         self.num_exits = len(self.model.multi_exit.exit_block_nums)
 
+    def forward(self, x, batch=None):
+        return self.model(x, batch['y'])
+
     def training_step(self, batch, batch_idx):
-        model_out = self(batch['x'])
+        model_out = self(batch['x'], batch)
         loss = 0
         main_loss_dict = eval(self.trainer_cfg.main_loss)(self.num_exits)(model_out, batch['y'])
         for ml in main_loss_dict:
@@ -45,7 +48,7 @@ class OccamTrainerV2(BaseTrainer):
 
     def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None):
         if model_outputs is None:
-            model_outputs = self(batch['x'])
+            model_outputs = self(batch['x'], batch)
         loader_key = self.get_loader_key(split, dataloader_idx)
         super().shared_validation_step(batch, batch_idx, split, dataloader_idx, model_outputs)
         if batch_idx == 0:

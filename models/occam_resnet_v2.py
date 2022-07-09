@@ -135,6 +135,12 @@ def occam_resnet18_v2_k9753_poe_detach_norm(num_classes):
     return occam_resnet18_v2_generic(num_classes, multi_exit_type=MultiExitPoEDetachNormalizePrev)
 
 
+def occam_resnet18_v2_k9753_weighted_poe_detach(num_classes, gamma=1.0):
+    m = occam_resnet18_v2_generic(num_classes, multi_exit_type=WeightedPoE)
+    m.multi_exit.set_gamma(gamma)
+    return m
+
+
 def occam_resnet18_v2_k3(num_classes):
     return occam_resnet18_v2_generic(num_classes)
 
