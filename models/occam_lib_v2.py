@@ -280,6 +280,7 @@ class MultiExitPoE(MultiExitModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.detach_prev = False
+        self.normalize_cams = False
 
     def forward(self, block_num_to_exit_in, y=None):
         exit_outs = super().forward(block_num_to_exit_in)
@@ -289,18 +290,45 @@ class MultiExitPoE(MultiExitModule):
             running_cams = self.update_running_vals(cams, running_cams)
             exit_outs[f"E={exit_ix}, cam"] = running_cams
             exit_outs[f"E={exit_ix}, logits"] = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
+            exit_outs[f"logits"] = exit_outs[f"E={exit_ix}, logits"]
         return exit_outs
 
     def update_running_vals(self, cams, running_cams):
+        if self.normalize_cams:
+            cams = normalize(cams)
         if running_cams is None:
             return cams
         _, _, h, w = cams.shape
-        running_cams = interpolate(running_cams.detach(), h, w) + cams if self.detach_prev else interpolate(
-            running_cams, h, w) + cams
+        if self.detach_prev:
+            running_cams = running_cams.detach()
+        running_cams = interpolate(running_cams, h, w) + cams
         return running_cams
+
+
+def normalize(tensor, eps=1e-5):
+    """
+
+    :param tensor: B x C x H x W
+    :param eps:
+    :return:
+    """
+    assert len(tensor.shape) == 4
+    maxes, mins = torch.max(tensor.reshape(len(tensor), -1), dim=1)[0].detach(), \
+                  torch.min(tensor.reshape(len(tensor), -1), dim=1)[0].detach()
+    maxes = maxes.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+    mins = mins.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+    normalized = (tensor - mins) / (maxes - mins + eps)
+    return normalized
 
 
 class MultiExitPoEDetachPrev(MultiExitPoE):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.detach_prev = True
+
+
+class MultiExitPoEDetachNormalizePrev(MultiExitPoE):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.detach_prev = True
+        self.normalize_cams = True

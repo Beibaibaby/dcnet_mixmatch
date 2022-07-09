@@ -117,13 +117,22 @@ def occam_resnet18_v2_k9753(num_classes):
                                      exit_padding=[5, 4, 3, 2])
 
 
-def occam_resnet18_v2_k9753_same_width(num_classes):
+def occam_resnet18_v2_k9753_same_width(num_classes, multi_exit_type=MultiExitModule):
     return occam_resnet18_v2_generic(num_classes,
+                                     multi_exit_type=multi_exit_type,
                                      kernel_sizes=[9, 7, 5, 3],
                                      exit_strides=[4, 3, 2, 1],
                                      exit_padding=[5, 4, 3, 2],
                                      exit_width_factors=[8, 4, 2, 1],
                                      cam_width_factors=[8, 4, 2, 1])
+
+
+def occam_resnet18_v2_k9753_poe_detach(num_classes):
+    return occam_resnet18_v2_generic(num_classes, multi_exit_type=MultiExitPoEDetachPrev)
+
+
+def occam_resnet18_v2_k9753_poe_detach_norm(num_classes):
+    return occam_resnet18_v2_generic(num_classes, multi_exit_type=MultiExitPoEDetachNormalizePrev)
 
 
 def occam_resnet18_v2_k3(num_classes):
