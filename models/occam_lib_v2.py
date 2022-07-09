@@ -349,7 +349,7 @@ class WeightedPoE(MultiExitModule):
             assert y is not None
         else:
             y = torch.argmax(running_logits, dim=1).squeeze().unsqueeze(1)
-        p = torch.gather(running_logits, dim=1, index=y).detach().unsqueeze(2).unsqueeze(3)
+        p = torch.gather(F.softmax(running_logits, dim=1), dim=1, index=y).detach().unsqueeze(2).unsqueeze(3)
         running_cams = p ** self.gamma * interpolate(running_cams, h, w) + cams
         return running_cams
 
