@@ -5,3 +5,7 @@ main_loss: CELoss
 calibration_loss: MDCALoss
 calibration_loss_wt: 1.0
 shape_prior_loss_wt: 0
+# CAM CE Loss params
+thresh_coeff: 1.0
+fg_wt: 1.0
+bg_wt: 1.0

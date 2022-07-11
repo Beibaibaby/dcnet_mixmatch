@@ -209,12 +209,13 @@ class CAMSuppressionLoss():
         cams = cams.reshape((b, c, h * w))
         gt_cams = torch.gather(cams, dim=1, index=gt_ys.squeeze().unsqueeze(dim=1).unsqueeze(dim=2)
                                .repeat(1, 1, h * w)).squeeze().reshape((b, h * w))
-        gt_max, gt_min, gt_mean = torch.max(gt_cams, dim=1)[0], torch.min(gt_cams, dim=1)[0], torch.mean(gt_cams, dim=1)
-        norm_gt_cams = (gt_cams - gt_min.unsqueeze(1)) / (gt_max.unsqueeze(1) - gt_min.unsqueeze(1)).detach()
+        gt_mean = torch.mean(gt_cams, dim=1)
+        # gt_max, gt_min, gt_mean = torch.max(gt_cams, dim=1)[0], torch.min(gt_cams, dim=1)[0], torch.mean(gt_cams, dim=1)
+        # norm_gt_cams = (gt_cams - gt_min.unsqueeze(1)) / (gt_max.unsqueeze(1) - gt_min.unsqueeze(1)).detach()
         threshold = gt_mean.unsqueeze(1).repeat(1, h * w)
 
         # Assign weights so that the locations which have a score lower than the threshold are suppressed
-        supp_wt = torch.where(gt_cams > threshold, torch.zeros_like(norm_gt_cams), torch.ones_like(norm_gt_cams))
+        supp_wt = torch.where(gt_cams > threshold, torch.zeros_like(gt_cams), torch.ones_like(gt_cams))
 
         uniform_targets = torch.ones_like(cams) / c
         uniform_kld_loss = torch.sum(uniform_targets * (torch.log_softmax(uniform_targets, dim=1) -

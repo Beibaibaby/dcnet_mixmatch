@@ -27,7 +27,12 @@ class OccamTrainerV2(BaseTrainer):
     def training_step(self, batch, batch_idx):
         model_out = self(batch['x'], batch)
         loss = 0
-        main_loss_dict = eval(self.trainer_cfg.main_loss)(self.num_exits)(model_out, batch['y'])
+        if self.trainer_cfg.main_loss == 'CAMCELoss':
+            main_loss_fn = CAMCELoss(self.num_exits, thresh_coeff=self.trainer_cfg.thresh_coeff,
+                                     fg_wt=self.trainer_cfg.fg_wt, bg_wt=self.trainer_cfg.bg_wt)
+        else:
+            main_loss_fn = eval(self.trainer_cfg.main_loss)(self.num_exits)
+        main_loss_dict = main_loss_fn(model_out, batch['y'])
         for ml in main_loss_dict:
             loss += main_loss_dict[ml]
         self.log_dict(main_loss_dict, py_logging=False)
@@ -161,6 +166,47 @@ class CELoss():
             # logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
             _loss = F.cross_entropy(logits, gt_ys.squeeze())
             loss_dict[f'E={exit_ix}, ce'] = _loss
+        return loss_dict
+
+
+class CAMCELoss():
+    def __init__(self, num_exits, thresh_coeff=1.0, fg_wt=1.0, bg_wt=1.0):
+        self.num_exits = num_exits
+        self.thresh_coeff = thresh_coeff
+        self.fg_wt = fg_wt
+        self.bg_wt = bg_wt
+
+    def __call__(self, exit_outs, gt_ys, loss_dict={}):
+        """
+        :param exit_outs: Dictionary mapping exit to CAMs, assumes they are ordered sequentially
+        :return:
+        """
+        for exit_ix in range(self.num_exits):
+            cams = exit_outs[f'E={exit_ix}, cam']
+            b, c, h, w = cams.shape
+            cams = cams.reshape((b, c, h * w))
+
+            # CAMs for GT class
+            gt_cams = torch.gather(cams, dim=1, index=gt_ys.squeeze().unsqueeze(dim=1).unsqueeze(dim=2)
+                                   .repeat(1, 1, h * w)).squeeze().reshape((b, h * w))
+            gt_mean = torch.mean(gt_cams, dim=1)
+
+            # Threshold is based on the mean CAM value
+            threshold = self.thresh_coeff * gt_mean.unsqueeze(1).repeat(1, h * w)
+
+            # CE loss on locations scoring higher than threshold
+            fg_wt = torch.where(gt_cams > threshold, torch.zeros_like(gt_cams), torch.ones_like(gt_cams))
+            fg_loss = fg_wt.unsqueeze(1).repeat(1, c, 1) * \
+                      F.cross_entropy(cams, gt_ys.squeeze().unsqueeze(1).repeat(1, h * w))
+            loss_dict[f'E={exit_ix}, fg'] = fg_loss.mean()
+
+            # Uniform prior for locations scoring lower than the threshold
+            bg_wt = (1 - fg_wt)
+            uniform_targets = torch.ones_like(cams) / c
+            uniform_kld_loss = torch.sum(uniform_targets * (torch.log_softmax(uniform_targets, dim=1) -
+                                                            torch.log_softmax(cams, dim=1)), dim=1)
+            bg_loss = (bg_wt * uniform_kld_loss).mean()
+            loss_dict[f'E={exit_ix}, bg'] = bg_loss.mean()
         return loss_dict
 
 
