@@ -1,7 +1,7 @@
 #!/bin/bash
 source activate occamnets
 
-GPU=0
+GPU=1
 
 dataset=image_net
 optim=image_net
@@ -11,8 +11,8 @@ precision=16
 for main_loss in CELoss; do
   for model in occam_resnet18_v2_k9753_same_width; do
     for fa_loss_wt in 1.0; do
-      for da_loss_wt2 in 1 5 10; do
-        for blur_sigma in 0.1; do
+      for da_loss_wt2 in 1; do
+        for blur_sigma in 0.25 0.5 1.0; do
           CUDA_VISIBLE_DEVICES=${GPU} python main.py \
           model.name=${model} \
           trainer=shape_prior_trainer \

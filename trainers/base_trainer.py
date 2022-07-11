@@ -45,20 +45,21 @@ class BaseTrainer(pl.LightningModule):
     def test_step(self, batch, batch_idx, dataloader_idx=None):
         return self.shared_validation_step(batch, batch_idx, 'test', dataloader_idx)
 
-    def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_out=None):
+    def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_out=None, loader_key=None):
         if model_out is None:
             model_out = self(batch['x'], batch)
-        loader_key = self.get_loader_key(split, dataloader_idx)
+        if loader_key is None:
+            loader_key = self.get_loader_key(split, dataloader_idx)
 
         if batch_idx == 0:
             accuracy = Accuracy()
-            setattr(self, f'{split}_{self.get_loader_key(split, dataloader_idx)}_accuracy', accuracy)
+            setattr(self, f'{split}_{loader_key}_accuracy', accuracy)
             self.init_calibration_analysis(split, loader_key)
 
-        accuracy = getattr(self, f'{split}_{self.get_loader_key(split, dataloader_idx)}_accuracy')
+        accuracy = getattr(self, f'{split}_{loader_key}_accuracy')
         self.accuracy_metric_step(batch, batch_idx, model_out, split, dataloader_idx, accuracy)
-        self.segmentation_metric_step(batch, batch_idx, model_out, split, dataloader_idx)
-        self.calibration_analysis_step(batch, batch_idx, split, dataloader_idx, model_out)
+        self.segmentation_metric_step(batch, batch_idx, model_out, split, dataloader_idx, loader_key=loader_key)
+        self.calibration_analysis_step(batch, batch_idx, split, dataloader_idx, model_out, loader_key=loader_key)
 
     def validation_epoch_end(self, outputs):
         return self.shared_validation_epoch_end(outputs, 'val')
@@ -66,8 +67,9 @@ class BaseTrainer(pl.LightningModule):
     def test_epoch_end(self, outputs):
         return self.shared_validation_epoch_end(outputs, 'test')
 
-    def shared_validation_epoch_end(self, outputs, split):
-        loader_keys = self.get_dataloader_keys(split)
+    def shared_validation_epoch_end(self, outputs, split, loader_keys=None):
+        if loader_keys is None:
+            loader_keys = self.get_dataloader_keys(split)
         for loader_key in loader_keys:
             accuracy = getattr(self, f'{split}_{loader_key}_accuracy')
             self.log(f"{split} {loader_key}_accuracy", accuracy.summary())
@@ -78,10 +80,11 @@ class BaseTrainer(pl.LightningModule):
                 json.dump(detailed, f, indent=True, sort_keys=True)
             self.segmentation_metric_epoch_end(split, loader_key)
             cal = getattr(self, f'{split}_{loader_key}_calibration_analysis')
-            cal.plot_reliability_diagram(os.path.join(os.getcwd(), f'reliability_diagrams/{loader_key}'))
+            cal.plot_reliability_diagram(os.path.join(os.getcwd(), f'reliability_diagrams/{split}_{loader_key}'))
 
-    def configure_optimizers(self):
-        named_params = self.model.named_parameters()
+    def configure_optimizers(self, named_params=None):
+        if named_params is None:
+            named_params = self.model.named_parameters()
         optimizer = optimizer_factory.build_optimizer(self.optim_cfg.name,
                                                       optim_args=self.optim_cfg.args,
                                                       named_params=named_params,
@@ -120,10 +123,11 @@ class BaseTrainer(pl.LightningModule):
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out, batch['y'], batch['class_name'], batch['group_name'])
 
-    def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
+    def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None, loader_key=None):
         if 'mask' not in batch:
             return
-        loader_key = self.get_loader_key(split, dataloader_idx)
+        if loader_key is None:
+            loader_key = self.get_loader_key(split, dataloader_idx)
         for cls_type in ['gt', 'pred']:  # Save segmentation metrics wrt GT vs predicted classes
             metric_key = f'{cls_type}_{split}_{loader_key}_segmentation_metrics'
             if batch_idx == 0:
@@ -154,8 +158,10 @@ class BaseTrainer(pl.LightningModule):
     def init_calibration_analysis(self, split, loader_key):
         setattr(self, f'{split}_{loader_key}_calibration_analysis', CalibrationAnalysis())
 
-    def calibration_analysis_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None):
-        loader_key = self.get_loader_key(split, dataloader_idx)
+    def calibration_analysis_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None,
+                                  loader_key=None):
+        if loader_key is None:
+            loader_key = self.get_loader_key(split, dataloader_idx)
         cal = getattr(self, f'{split}_{loader_key}_calibration_analysis')
         cal.update(batch, model_outputs)
 
@@ -170,7 +176,8 @@ class BaseTrainer(pl.LightningModule):
             add_dataloader_idx=True,
             batch_size=None,
             metric_attribute=None,
-            rank_zero_only=False, py_logging=True) -> None:
+            rank_zero_only=False,
+            py_logging=True) -> None:
         super().log(name, value, prog_bar, logger, on_step, on_epoch, reduce_fx, enable_graph,
                     sync_dist, sync_dist_group, add_dataloader_idx, batch_size, metric_attribute, rank_zero_only)
         if py_logging:
@@ -190,14 +197,15 @@ class BaseTrainer(pl.LightningModule):
             add_dataloader_idx=True,
             batch_size=None,
             rank_zero_only=False,
-            py_logging=True
+            py_logging=True,
+            prefix=''
     ) -> None:
         # super().log_dict(dictionary, prog_bar, logger, on_step, on_epoch, reduce_fx, enable_graph, sync_dist,
         #                  sync_dist_group, add_dataloader_idx, batch_size, rank_zero_only)
 
         for k, v in dictionary.items():
             self.log(
-                name=k,
+                name=prefix + k,
                 value=v,
                 prog_bar=prog_bar,
                 logger=logger,
