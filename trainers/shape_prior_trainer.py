@@ -7,11 +7,10 @@ from analysis.analyze_segmentation import SegmentationMetrics, save_exitwise_hea
 from utils.cam_utils import get_class_cams_for_occam_nets, interpolate
 from netcal.presentation import ReliabilityDiagram
 from netcal.metrics import ECE
-from utils.cam_utils import interpolate
 from models import model_factory
-from utils import optimizer_factory
 import torch.nn as nn
 from torchvision.transforms import GaussianBlur
+from utils import optimizer_factory, lr_schedulers
 
 
 class Sobel(nn.Module):
@@ -69,25 +68,27 @@ class ShapePriorTrainer(BaseTrainer):
 
     def build_model(self):
         main_model = model_factory.build_model(self.config.model)
+        self.config.model.name = 'occam_resnet18_v2_k7533_same_width'
         shape_model = model_factory.build_model(self.config.model)
         self.model = DualModel(main_model, shape_model, sigma=self.trainer_cfg.blur_sigma)
 
     def training_step(self, batch, batch_idx):
+        torch.autograd.set_detect_anomaly(True)
         main_out, shape_out = self(batch['x'], batch)
         loss = 0
 
         ############################################################################################
         # CE loss for both the networks
         ############################################################################################
-        main_loss_fn = eval(self.trainer_cfg.main_loss)(self.num_exits)
-        main_loss_dict = main_loss_fn(main_out, batch['y'])
-        shape_loss_dict = main_loss_fn(shape_out, batch['y'])
+        loss_fn = eval(self.trainer_cfg.main_loss)(self.num_exits)
+        main_loss_dict = loss_fn(main_out, batch['y'])
+        shape_loss_dict = loss_fn(shape_out, batch['y'])
 
-        for ml in main_loss_dict:
-            loss += main_loss_dict[ml]
-            loss += shape_loss_dict[ml]
-        self.log_dict(main_loss_dict, py_logging=False, prefix='main_')
-        self.log_dict(shape_loss_dict, py_logging=False, prefix='shape_')
+        for key in main_loss_dict:
+            loss += main_loss_dict[key]
+            loss += shape_loss_dict[key]
+        self.log_dict(main_loss_dict, py_logging=False, prefix='main_model_')
+        self.log_dict(shape_loss_dict, py_logging=False, prefix='shape_model_')
 
         ############################################################################################
         # Feature Alignment Loss
@@ -96,10 +97,11 @@ class ShapePriorTrainer(BaseTrainer):
             main_in, shape_in = main_out[f'E={exit_ix}, exit_in'], shape_out[f'E={exit_ix}, exit_in']
             fa_loss = self.trainer_cfg.fa_loss_wt * F.mse_loss(main_in, shape_in)
             self.log(f'E={exit_ix}, fa', fa_loss, py_logging=False)
+            loss += fa_loss
 
-        ############################################################################################
+        # ############################################################################################
         # Decision Alignment Loss
-        ############################################################################################
+        # ############################################################################################
         for exit_ix in range(self.num_exits):
             main_logits, shape_logits = main_out[f'E={exit_ix}, logits'], shape_out[f'E={exit_ix}, logits']
             main_log_sm, shape_log_sm = F.log_softmax(main_logits, dim=1), F.log_softmax(shape_logits, dim=1)
@@ -107,6 +109,7 @@ class ShapePriorTrainer(BaseTrainer):
             da_loss = (self.trainer_cfg.da_loss_wt1 * kld_fn(main_log_sm, shape_log_sm) +
                        self.trainer_cfg.da_loss_wt2 * kld_fn(shape_log_sm, main_log_sm))
             self.log(f'E={exit_ix}, da', da_loss, py_logging=False)
+            loss += da_loss
 
         return loss
 
@@ -114,32 +117,29 @@ class ShapePriorTrainer(BaseTrainer):
         if model_outputs is None:
             model_outputs = self(batch['x'], batch)
         loader_key = self.get_loader_key(split, dataloader_idx)
-        for curr_outputs, model_key in zip(model_outputs, ['main', 'shape']):
-            model_split = f"{model_key}_{split}"
-            super().shared_validation_step(batch, batch_idx, model_split, dataloader_idx, curr_outputs,
-                                           loader_key=loader_key)
+        for curr_outputs, model_key in zip(model_outputs, ['main_model_', 'shape_model_']):
+            super().shared_validation_step(batch, batch_idx, split, dataloader_idx, curr_outputs,
+                                           loader_key=loader_key, prefix=model_key)
             if batch_idx == 0:
                 me_stats = MultiExitStats()
-                setattr(self, f'{model_split}_{loader_key}_multi_exit_stats', me_stats)
+                setattr(self, f'{model_key}{split}_{loader_key}_multi_exit_stats', me_stats)
 
             me_stats = getattr(self,
-                               f'{model_split}_{self.get_loader_key(split, dataloader_idx)}_multi_exit_stats')
+                               f'{model_key}{split}_{loader_key}_multi_exit_stats')
             me_stats(self.num_exits, curr_outputs, batch['y'], batch['class_name'], batch['group_name'])
 
     def shared_validation_epoch_end(self, outputs, split):
         loader_keys = self.get_dataloader_keys(split)
-        for model_key in ['main', 'shape']:
-            model_split = f"{model_key}_{split}"
-            super().shared_validation_epoch_end(outputs, model_split, loader_keys=loader_keys)
+        for model_key in ['main_model_', 'shape_model_']:
+            super().shared_validation_epoch_end(outputs, split, prefix=model_key)
             for loader_key in loader_keys:
-                me_stats = getattr(self, f'{model_split}_{loader_key}_multi_exit_stats')
-                self.log_dict(me_stats.summary(prefix=f'{model_split} {loader_key} '))
+                me_stats = getattr(self, f'{model_key}{split}_{loader_key}_multi_exit_stats')
+                self.log_dict(me_stats.summary(prefix=f'{model_key}{split} {loader_key} '))
 
-    def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None, loader_key=None):
+    def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None, prefix=''):
         if 'mask' not in batch:
             return
-        if loader_key is None:
-            loader_key = self.get_loader_key(split, dataloader_idx)
+        loader_key = self.get_loader_key(split, dataloader_idx)
 
         # Per-exit segmentation metrics
         for cls_type in ['gt', 'pred']:
@@ -148,7 +148,7 @@ class ShapePriorTrainer(BaseTrainer):
 
             for exit_name in self.model.main_model.multi_exit.get_exit_names():
                 # Metric for CAM
-                metric_key = f'{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
+                metric_key = f'{prefix}{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
 
                 if batch_idx == 0:
                     setattr(self, metric_key, SegmentationMetrics())
@@ -161,7 +161,7 @@ class ShapePriorTrainer(BaseTrainer):
                 if cls_type == 'gt':
                     for hid_type in ['exit_in', 'cam_in']:
                         # Metric for hidden feature
-                        hid_metric_key = f'{exit_name}_{split}_{loader_key}_{hid_type}_segmentation_metrics'
+                        hid_metric_key = f'{prefix}{exit_name}_{split}_{loader_key}_{hid_type}_segmentation_metrics'
 
                         if batch_idx == 0:
                             setattr(self, hid_metric_key, SegmentationMetrics())
@@ -174,10 +174,10 @@ class ShapePriorTrainer(BaseTrainer):
 
             if cls_type == 'gt':
                 self.save_heat_maps_step(batch_idx, batch, exit_to_class_cams, split,
-                                         heat_map_suffix=f"_{cls_type}")
+                                         heat_map_suffix=f"_{prefix}{cls_type}")
                 for hid_type in ['exit_in', 'cam_in']:
                     self.save_heat_maps_step(batch_idx, batch, hid_type_to_exit_to_hid_norms[hid_type], split,
-                                             heat_map_suffix=f"_{hid_type}")
+                                             heat_map_suffix=f"_{prefix}{hid_type}")
 
     def save_heat_maps_step(self, batch_idx, batch, exit_to_heat_maps, split, heat_map_suffix=''):
         """
@@ -194,12 +194,13 @@ class ShapePriorTrainer(BaseTrainer):
         gt_mask = None if 'mask' not in batch else batch['mask'][0]
         save_exitwise_heatmaps(batch['x'][0], gt_mask, _exit_to_heat_maps, save_dir, heat_map_suffix=heat_map_suffix)
 
-    def segmentation_metric_epoch_end(self, split, loader_key):
+    def segmentation_metric_epoch_end(self, split, loader_key, prefix=''):
         for model_key in ['main', 'shape']:
             model_split = f'{model_key}_{split}'
             for cls_type in ['gt', 'pred']:
                 for exit_name in self.model.main_model.multi_exit.get_exit_names():
-                    for metric_key in [f'{cls_type}_{exit_name}_{model_split}_{loader_key}_segmentation_metrics']:
+                    for metric_key in [
+                        f'{prefix}{cls_type}_{exit_name}_{model_split}_{loader_key}_segmentation_metrics']:
                         if hasattr(self, metric_key):
                             seg_metric_vals = getattr(self, metric_key).summary()
                             for sk in seg_metric_vals:
@@ -216,24 +217,24 @@ class ShapePriorTrainer(BaseTrainer):
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out['logits'], batch['y'], batch['class_name'], batch['group_name'])
 
-    def init_calibration_analysis(self, split, loader_key):
-        setattr(self, f'{split}_{loader_key}_calibration_analysis', CalibrationAnalysis(self.num_exits))
+    def init_calibration_analysis(self, split, loader_key, prefix=''):
+        setattr(self, f'{prefix}{split}_{loader_key}_calibration_analysis', CalibrationAnalysis(self.num_exits))
 
 
 class CELoss():
     def __init__(self, num_exits):
         self.num_exits = num_exits
 
-    def __call__(self, exit_outs, gt_ys, loss_dict={}):
+    def __call__(self, exit_outs, gt_ys, prefix=''):
         """
         :param exit_outs: Dictionary mapping exit to CAMs, assumes they are ordered sequentially
         :return:
         """
+        loss_dict = {}
         for exit_ix in range(self.num_exits):
-            logits = exit_outs[f'E={exit_ix}, logits']
-            # logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
+            logits = exit_outs[f'{prefix}E={exit_ix}, logits']
             _loss = F.cross_entropy(logits, gt_ys.squeeze())
-            loss_dict[f'E={exit_ix}, ce'] = _loss
+            loss_dict[f'{prefix}E={exit_ix}, ce'] = _loss
         return loss_dict
 
 
@@ -246,20 +247,15 @@ class CalibrationAnalysis():
         """
         Gather per-exit + overall logits
         """
-        overall_logits = 0
         for exit_ix in range(self.num_exits):
             cam = exit_outs[f'E={exit_ix}, cam']
             logits = F.adaptive_avg_pool2d(cam, (1)).squeeze().detach().cpu()
-            # overall_logits += logits
 
             if f'E={exit_ix}' not in self.exit_ix_to_logits:
                 self.exit_ix_to_logits[f'E={exit_ix}'] = logits
-                # self.exit_ix_to_logits[f'sum_upto_E={exit_ix}'] = overall_logits
             else:
                 self.exit_ix_to_logits[f'E={exit_ix}'] = torch.cat([self.exit_ix_to_logits[f'E={exit_ix}'], logits],
                                                                    dim=0)
-                # self.exit_ix_to_logits[f'sum_upto_E={exit_ix}'] = torch.cat(
-                #     [self.exit_ix_to_logits[f'sum_upto_E={exit_ix}'], overall_logits], dim=0)
 
         if self.gt_ys is None:
             self.gt_ys = batch['y'].detach().cpu().squeeze()

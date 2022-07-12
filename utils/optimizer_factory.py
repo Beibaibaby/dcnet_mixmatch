@@ -4,7 +4,7 @@ from torch.optim import *
 
 
 def build_optimizer(optimizer_name, optim_args, named_params, freeze_layers=None,
-                    custom_lr_config=None, model=None):  # , use_agc=False, agc_ignore_layers=['fc'], model=None):
+                    custom_lr_config=None):  # , use_agc=False, agc_ignore_layers=['fc'], model=None):
     def should_be_added(layer_name, param):
         if not param.requires_grad:
             logging.getLogger().info(f'layer_name {layer_name} does not require grad')

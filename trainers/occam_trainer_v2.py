@@ -156,11 +156,12 @@ class CELoss():
     def __init__(self, num_exits):
         self.num_exits = num_exits
 
-    def __call__(self, exit_outs, gt_ys, loss_dict={}):
+    def __call__(self, exit_outs, gt_ys):
         """
         :param exit_outs: Dictionary mapping exit to CAMs, assumes they are ordered sequentially
         :return:
         """
+        loss_dict = {}
         for exit_ix in range(self.num_exits):
             logits = exit_outs[f'E={exit_ix}, logits']
             # logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
@@ -176,11 +177,12 @@ class CAMCELoss():
         self.fg_wt = fg_wt
         self.bg_wt = bg_wt
 
-    def __call__(self, exit_outs, gt_ys, loss_dict={}):
+    def __call__(self, exit_outs, gt_ys):
         """
         :param exit_outs: Dictionary mapping exit to CAMs, assumes they are ordered sequentially
         :return:
         """
+        loss_dict = {}
         for exit_ix in range(self.num_exits):
             cams = exit_outs[f'E={exit_ix}, cam']
             b, c, h, w = cams.shape
@@ -287,57 +289,3 @@ class ShapePriorLoss():
             loss = F.mse_loss(exit_in_norm, gt_cams.detach()).squeeze()
             loss_dict[f'E={exit_ix}, shape_prior'] = loss
         return loss_dict
-
-# class JointCELoss():
-#     def __init__(self, num_exits):
-#         self.num_exits = num_exits
-#
-#     def __call__(self, exit_outs, gt_ys, loss_dict={}):
-#         """
-#         :param exit_outs: Dictionary mapping exit to CAMs, assumes they are ordered sequentially
-#         :return:
-#         """
-#         running_logits = 0
-#         for exit_ix in range(self.num_exits):
-#             logits = exit_outs[f'E={exit_ix}, logits']
-#             running_logits += F.adaptive_avg_pool2d(cam, (1)).squeeze()
-#         _loss = F.cross_entropy(running_logits, gt_ys.squeeze())
-#         loss_dict[f'joint_ce'] = _loss
-#         return loss_dict
-
-
-# class ResMDCALoss(torch.nn.Module):
-#     def __init__(self, num_exits, detach_prev=False):
-#         super(ResMDCALoss, self).__init__()
-#         self.num_exits = num_exits
-#         self.detach_prev = detach_prev
-#
-#     def forward(self, exit_outs, target):
-#         running_logits = None
-#         loss_dict = {}
-#         for exit_ix in range(self.num_exits):
-#             cam = exit_outs[f'E={exit_ix}, cam']
-#             logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
-#             if running_logits is None:
-#                 running_logits = logits
-#             else:
-#                 if self.detach_prev:
-#                     running_logits = logits + running_logits.detach()
-#                 else:
-#                     running_logits = logits + running_logits
-#             # [batch, classes]
-#             loss = torch.tensor(0.0).cuda()
-#             batch, classes = running_logits.shape
-#             for c in range(classes):
-#                 avg_count = (target == c).float().mean()
-#                 avg_conf = torch.mean(running_logits[:, c])
-#                 loss += torch.abs(avg_conf - avg_count)
-#             denom = classes
-#             loss /= denom
-#             loss_dict[f'E={exit_ix}, residual_calibration'] = loss
-#         return loss_dict
-#
-#
-# class ResMDCADetachedLoss(ResMDCALoss):
-#     def __init__(self, num_exits):
-#         super(ResMDCADetachedLoss, self).__init__(num_exits, detach_prev=True)

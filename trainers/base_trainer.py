@@ -45,21 +45,23 @@ class BaseTrainer(pl.LightningModule):
     def test_step(self, batch, batch_idx, dataloader_idx=None):
         return self.shared_validation_step(batch, batch_idx, 'test', dataloader_idx)
 
-    def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_out=None, loader_key=None):
+    def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_out=None, loader_key=None,
+                               prefix=''):
         if model_out is None:
             model_out = self(batch['x'], batch)
         if loader_key is None:
             loader_key = self.get_loader_key(split, dataloader_idx)
 
+        acc_key = f'{prefix}{split}_{loader_key}_accuracy'
         if batch_idx == 0:
             accuracy = Accuracy()
-            setattr(self, f'{split}_{loader_key}_accuracy', accuracy)
-            self.init_calibration_analysis(split, loader_key)
+            setattr(self, acc_key, accuracy)
+            self.init_calibration_analysis(split, loader_key, prefix=prefix)
 
-        accuracy = getattr(self, f'{split}_{loader_key}_accuracy')
+        accuracy = getattr(self, acc_key)
         self.accuracy_metric_step(batch, batch_idx, model_out, split, dataloader_idx, accuracy)
-        self.segmentation_metric_step(batch, batch_idx, model_out, split, dataloader_idx, loader_key=loader_key)
-        self.calibration_analysis_step(batch, batch_idx, split, dataloader_idx, model_out, loader_key=loader_key)
+        self.segmentation_metric_step(batch, batch_idx, model_out, split, dataloader_idx, prefix=prefix)
+        self.calibration_analysis_step(batch, batch_idx, split, dataloader_idx, model_out, prefix=prefix)
 
     def validation_epoch_end(self, outputs):
         return self.shared_validation_epoch_end(outputs, 'val')
@@ -67,29 +69,27 @@ class BaseTrainer(pl.LightningModule):
     def test_epoch_end(self, outputs):
         return self.shared_validation_epoch_end(outputs, 'test')
 
-    def shared_validation_epoch_end(self, outputs, split, loader_keys=None):
-        if loader_keys is None:
-            loader_keys = self.get_dataloader_keys(split)
+    def shared_validation_epoch_end(self, outputs, split, prefix=''):
+        loader_keys = self.get_dataloader_keys(split)
         for loader_key in loader_keys:
-            accuracy = getattr(self, f'{split}_{loader_key}_accuracy')
-            self.log(f"{split} {loader_key}_accuracy", accuracy.summary())
+
+            accuracy = getattr(self, f'{prefix}{split}_{loader_key}_accuracy')
+            self.log(f"{prefix}{split} {loader_key}_accuracy", accuracy.summary())
             detailed = accuracy.detailed()
-            save_dir = os.path.join(os.getcwd(), loader_key)
+            save_dir = os.path.join(os.getcwd(), f'{prefix}{split} {loader_key}')
             os.makedirs(save_dir, exist_ok=True)
             with open(os.path.join(save_dir, f'ep_{self.current_epoch}.json'), 'w') as f:
                 json.dump(detailed, f, indent=True, sort_keys=True)
-            self.segmentation_metric_epoch_end(split, loader_key)
-            cal = getattr(self, f'{split}_{loader_key}_calibration_analysis')
-            cal.plot_reliability_diagram(os.path.join(os.getcwd(), f'reliability_diagrams/{split}_{loader_key}'))
+            self.segmentation_metric_epoch_end(split, loader_key, prefix)
+            cal = getattr(self, f'{prefix}{split}_{loader_key}_calibration_analysis')
+            cal.plot_reliability_diagram(
+                os.path.join(os.getcwd(), f'reliability_diagrams/{prefix}{split}_{loader_key}'))
 
-    def configure_optimizers(self, named_params=None):
-        if named_params is None:
-            named_params = self.model.named_parameters()
+    def configure_optimizers(self):
         optimizer = optimizer_factory.build_optimizer(self.optim_cfg.name,
                                                       optim_args=self.optim_cfg.args,
-                                                      named_params=named_params,
-                                                      freeze_layers=self.optim_cfg.freeze_layers,
-                                                      model=self.model)
+                                                      named_params=self.model.named_parameters(),
+                                                      freeze_layers=self.optim_cfg.freeze_layers)
         lr_scheduler = lr_schedulers.build_lr_scheduler(self.optim_cfg, optimizer)
         return {'optimizer': optimizer,
                 'lr_scheduler': lr_scheduler}
@@ -123,13 +123,12 @@ class BaseTrainer(pl.LightningModule):
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out, batch['y'], batch['class_name'], batch['group_name'])
 
-    def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None, loader_key=None):
+    def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None, prefix=''):
         if 'mask' not in batch:
             return
-        if loader_key is None:
-            loader_key = self.get_loader_key(split, dataloader_idx)
+        loader_key = self.get_loader_key(split, dataloader_idx)
         for cls_type in ['gt', 'pred']:  # Save segmentation metrics wrt GT vs predicted classes
-            metric_key = f'{cls_type}_{split}_{loader_key}_segmentation_metrics'
+            metric_key = f'{prefix}{cls_type}_{split}_{loader_key}_segmentation_metrics'
             if batch_idx == 0:
                 setattr(self, metric_key, SegmentationMetrics())
             gt_masks = batch['mask']
@@ -155,14 +154,12 @@ class BaseTrainer(pl.LightningModule):
                 for sk in seg_metric_vals:
                     self.log(f"{metric_key} {sk}", seg_metric_vals[sk])
 
-    def init_calibration_analysis(self, split, loader_key):
-        setattr(self, f'{split}_{loader_key}_calibration_analysis', CalibrationAnalysis())
+    def init_calibration_analysis(self, split, loader_key, prefix=''):
+        setattr(self, f'{prefix}{split}_{loader_key}_calibration_analysis', CalibrationAnalysis())
 
-    def calibration_analysis_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None,
-                                  loader_key=None):
-        if loader_key is None:
-            loader_key = self.get_loader_key(split, dataloader_idx)
-        cal = getattr(self, f'{split}_{loader_key}_calibration_analysis')
+    def calibration_analysis_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None, prefix=''):
+        loader_key = self.get_loader_key(split, dataloader_idx)
+        cal = getattr(self, f'{prefix}{split}_{loader_key}_calibration_analysis')
         cal.update(batch, model_outputs)
 
     def log(self, name, value, prog_bar: bool = False,
