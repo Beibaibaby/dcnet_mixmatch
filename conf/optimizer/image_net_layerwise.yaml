@@ -1,0 +1,3 @@
+defaults:
+  - image_net
+finetuning_epochs: 10

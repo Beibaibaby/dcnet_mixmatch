@@ -70,7 +70,7 @@ class OccamTrainerV2(BaseTrainer):
             me_stats = getattr(self, f'{split}_{loader_key}_multi_exit_stats')
             self.log_dict(me_stats.summary(prefix=f'{split} {loader_key} '))
 
-    def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None):
+    def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None, prefix=''):
         if 'mask' not in batch:
             return
 
@@ -83,7 +83,7 @@ class OccamTrainerV2(BaseTrainer):
 
             for exit_name in self.model.multi_exit.get_exit_names():
                 # Metric for CAM
-                metric_key = f'{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
+                metric_key = f'{prefix}{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
 
                 if batch_idx == 0:
                     setattr(self, metric_key, SegmentationMetrics())
@@ -96,7 +96,7 @@ class OccamTrainerV2(BaseTrainer):
                 if cls_type == 'gt':
                     for hid_type in ['exit_in', 'cam_in']:
                         # Metric for hidden feature
-                        hid_metric_key = f'{exit_name}_{split}_{loader_key}_{hid_type}_segmentation_metrics'
+                        hid_metric_key = f'{prefix}{exit_name}_{split}_{loader_key}_{hid_type}_segmentation_metrics'
 
                         if batch_idx == 0:
                             setattr(self, hid_metric_key, SegmentationMetrics())
@@ -108,10 +108,10 @@ class OccamTrainerV2(BaseTrainer):
                         hid_type_to_exit_to_hid_norms[hid_type][exit_name] = hid
 
             if cls_type == 'gt':
-                self.save_heat_maps_step(batch_idx, batch, exit_to_class_cams, heat_map_suffix=f"_{cls_type}")
+                self.save_heat_maps_step(batch_idx, batch, exit_to_class_cams, heat_map_suffix=f"_{prefix}{cls_type}")
                 for hid_type in ['exit_in', 'cam_in']:
                     self.save_heat_maps_step(batch_idx, batch, hid_type_to_exit_to_hid_norms[hid_type],
-                                             heat_map_suffix=f"_{hid_type}")
+                                             heat_map_suffix=f"_{prefix}{hid_type}")
 
     def save_heat_maps_step(self, batch_idx, batch, exit_to_heat_maps, heat_map_suffix=''):
         """
@@ -128,10 +128,10 @@ class OccamTrainerV2(BaseTrainer):
         gt_mask = None if 'mask' not in batch else batch['mask'][0]
         save_exitwise_heatmaps(batch['x'][0], gt_mask, _exit_to_heat_maps, save_dir, heat_map_suffix=heat_map_suffix)
 
-    def segmentation_metric_epoch_end(self, split, loader_key):
+    def segmentation_metric_epoch_end(self, split, loader_key, prefix=''):
         for cls_type in ['gt', 'pred']:
             for exit_name in self.model.multi_exit.get_exit_names():
-                for metric_key in [f'{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics']:
+                for metric_key in [f'{prefix}{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics']:
                     if hasattr(self, metric_key):
                         seg_metric_vals = getattr(self, metric_key).summary()
                         for sk in seg_metric_vals:
@@ -139,7 +139,7 @@ class OccamTrainerV2(BaseTrainer):
 
         for exit_name in self.model.multi_exit.get_exit_names():
             for hid_type in ['exit_in', 'cam_in']:
-                for metric_key in [f'{exit_name}_{split}_{loader_key}_{hid_type}_segmentation_metrics']:
+                for metric_key in [f'{prefix}{exit_name}_{split}_{loader_key}_{hid_type}_segmentation_metrics']:
                     if hasattr(self, metric_key):
                         seg_metric_vals = getattr(self, metric_key).summary()
                         for sk in seg_metric_vals:
@@ -148,8 +148,8 @@ class OccamTrainerV2(BaseTrainer):
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out['logits'], batch['y'], batch['class_name'], batch['group_name'])
 
-    def init_calibration_analysis(self, split, loader_key):
-        setattr(self, f'{split}_{loader_key}_calibration_analysis', CalibrationAnalysis(self.num_exits))
+    def init_calibration_analysis(self, split, loader_key, prefix=''):
+        setattr(self, f'{prefix}{split}_{loader_key}_calibration_analysis', CalibrationAnalysis(self.num_exits))
 
 
 class CELoss():

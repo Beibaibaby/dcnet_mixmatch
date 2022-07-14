@@ -9,6 +9,8 @@ import numpy as np
 from datasets import dataloader_factory
 from trainers import trainer_factory
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
+import yaml
 
 log = logging.getLogger(__name__)
 
@@ -18,11 +20,6 @@ def init_seeds(cfg):
     torch.manual_seed(cfg.seed)
     torch.cuda.manual_seed_all(cfg.seed)
     np.random.seed(cfg.seed)
-
-
-def init_expt_dir(cfg, expt_dir):
-    cfg.expt_dir = expt_dir
-    os.makedirs(cfg.expt_dir, exist_ok=True)
 
 
 def init_app(cfg):
@@ -40,7 +37,10 @@ def init_app(cfg):
 def exec(cfg: DictConfig) -> None:
     init_app(cfg)
     cfg.model.num_classes = cfg.dataset.num_classes
-    log.info(OmegaConf.to_yaml(cfg, sort_keys=True, resolve=True))
+    yaml_cfg = OmegaConf.to_yaml(cfg, sort_keys=True, resolve=True)
+
+    with open(os.path.join(os.getcwd(), 'config.yaml'), 'w') as f:
+        f.writelines(yaml_cfg)
 
     # Commented out unsupported/yet-to-support tasks
     if cfg.task.name == 'test':
@@ -63,22 +63,55 @@ def exec(cfg: DictConfig) -> None:
         trainer.set_dataloader_keys('test', list(data_loaders['test'].keys()))
         trainer.set_iters_per_epoch(len(data_loaders['train']))
 
-        pl_trainer = pl.Trainer(gpus=cfg.gpus,
-                                min_epochs=cfg.optimizer.epochs,
-                                max_epochs=cfg.optimizer.epochs,
-                                check_val_every_n_epoch=cfg.trainer.check_val_every_n_epoch,
-                                num_sanity_val_steps=0,
-                                limit_train_batches=cfg.trainer.limit_train_batches,
-                                limit_val_batches=cfg.trainer.limit_val_batches,
-                                limit_test_batches=cfg.trainer.limit_test_batches,
-                                precision=cfg.trainer.precision,
-                                gradient_clip_val=cfg.trainer.gradient_clip_val,
-                                log_every_n_steps=1)
-        trainer.set_train_loader(data_loaders['train'])
-        pl_trainer.fit(trainer,
-                       train_dataloaders=data_loaders['train'],
-                       val_dataloaders=list(data_loaders['val'].values()))
-        pl_trainer.test(trainer, list(data_loaders['test'].values()))
+        if 'layerwise' in cfg.trainer.name.lower():
+            # Layer wise training
+            parent_dir = os.getcwd()
+            for stage in range(trainer.num_exits + 1):
+                logging.getLogger().info(f"STAGE#: {stage}")
+                trainer.stage = stage
+                if stage == 1:
+                    trainer.final_lr = trainer.lr_schedulers().get_lr()[-1]
+                epochs = cfg.optimizer.epochs if stage == 0 else cfg.optimizer.finetuning_epochs
+                stage_dir = os.path.join(parent_dir, f'stage_{stage}')
+                os.makedirs(stage_dir, exist_ok=True)
+                os.chdir(stage_dir)
+                pl_trainer = pl.Trainer(gpus=cfg.gpus,
+                                        min_epochs=epochs,
+                                        max_epochs=epochs,
+                                        check_val_every_n_epoch=cfg.trainer.check_val_every_n_epoch,
+                                        num_sanity_val_steps=0,
+                                        limit_train_batches=cfg.trainer.limit_train_batches,
+                                        limit_val_batches=cfg.trainer.limit_val_batches,
+                                        limit_test_batches=cfg.trainer.limit_test_batches,
+                                        precision=cfg.trainer.precision,
+                                        gradient_clip_val=cfg.trainer.gradient_clip_val,
+                                        log_every_n_steps=1,
+                                        callbacks=[ModelCheckpoint(save_on_train_epoch_end=True)])
+                pl_trainer.fit(trainer,
+                               train_dataloaders=data_loaders['train'],
+                               val_dataloaders=list(data_loaders['val'].values()))
+                pl_trainer.test(trainer, list(data_loaders['test'].values()))
+
+        else:
+            # Single stage training
+            pl_trainer = pl.Trainer(gpus=cfg.gpus,
+                                    min_epochs=cfg.optimizer.epochs,
+                                    max_epochs=cfg.optimizer.epochs,
+                                    check_val_every_n_epoch=cfg.trainer.check_val_every_n_epoch,
+                                    num_sanity_val_steps=0,
+                                    limit_train_batches=cfg.trainer.limit_train_batches,
+                                    limit_val_batches=cfg.trainer.limit_val_batches,
+                                    limit_test_batches=cfg.trainer.limit_test_batches,
+                                    precision=cfg.trainer.precision,
+                                    gradient_clip_val=cfg.trainer.gradient_clip_val,
+                                    log_every_n_steps=1,
+                                    callbacks=[ModelCheckpoint(save_on_train_epoch_end=True)])
+            trainer.set_train_loader(data_loaders['train'])
+
+            pl_trainer.fit(trainer,
+                           train_dataloaders=data_loaders['train'],
+                           val_dataloaders=list(data_loaders['val'].values()), )
+            pl_trainer.test(trainer, list(data_loaders['test'].values()))
 
 
 ROOT = '/hdd/robik'
