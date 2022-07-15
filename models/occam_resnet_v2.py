@@ -38,6 +38,8 @@ class OccamResNetV2(VariableWidthResNet):
             multi_exit.build_and_add_exit(getattr(self, f'layer{i + 1}')[-1].out_dims)
         self.multi_exit = multi_exit
         self.init_weights()
+        self.set_final_exit_ix(3)
+        self._set_modules_for_exit_ix()
 
     def init_weights(self):
         for m in self.modules():
@@ -57,7 +59,7 @@ class OccamResNetV2(VariableWidthResNet):
         if self.use_initial_max_pooling:
             x = self.maxpool(x)
 
-        for i in range(0, 4):
+        for i in range(0, self.final_block_num + 1):
             x = getattr(self, f'layer{i + 1}')(x)
             block_num_to_exit_in[i] = x
 
@@ -65,6 +67,30 @@ class OccamResNetV2(VariableWidthResNet):
 
     def get_multi_exit(self):
         return self.multi_exit
+
+    def set_final_exit_ix(self, final_exit_ix):
+        """
+        Performs forward pass only upto the specified exit
+        """
+        self.final_exit_ix = final_exit_ix
+        self.multi_exit.set_final_exit_ix(final_exit_ix)
+        self.final_block_num = self.multi_exit.final_block_num
+
+    def _set_modules_for_exit_ix(self):
+        """
+        Creates a map where each exit is mapped to modules between exit_ix - 1 and exit_ix.
+        Modules include core block + the given exit
+        """
+        self.modules_for_exit_ix = {}
+        for exit_ix in range(0, 4):
+            if exit_ix == 0:
+                self.modules_for_exit_ix[exit_ix] = [self.conv1, self.bn1, getattr(self, f'layer{exit_ix + 1}')]
+            else:
+                self.modules_for_exit_ix[exit_ix] = [getattr(self, f'layer{exit_ix + 1}')]
+            self.modules_for_exit_ix[exit_ix].append(self.multi_exit.exits[exit_ix])
+
+    def get_modules_for_exit_ix(self, exit_ix):
+        return self.modules_for_exit_ix[exit_ix]
 
 
 def occam_resnet18_img64_v2(num_classes, width=58, multi_exit_type=MultiExitModule, exits_kwargs={}):

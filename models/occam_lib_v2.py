@@ -221,7 +221,7 @@ class MultiExitModule(nn.Module):
         self.exits = nn.ModuleList(self.exits)
 
     def get_exit_names(self):
-        names = [f'E={exit_ix}' for exit_ix in range(len(self.exit_block_nums))]
+        names = [f'E={exit_ix}' for exit_ix in range(self.final_exit_ix + 1)]
         return names
 
     def get_exit_block_nums(self):
@@ -231,24 +231,31 @@ class MultiExitModule(nn.Module):
         exit_outs = {}
         exit_ix = 0
         for block_num in block_num_to_exit_in:
-            if block_num in self.exit_block_nums:
+            if block_num in self.exit_block_nums and block_num <= self.final_block_num:
                 exit_in = block_num_to_exit_in[block_num]
                 if exit_ix in self.detached_exit_ixs:
                     exit_in = exit_in.detach()
                 exit_out = self.exits[exit_ix](exit_in, y=y)
                 for k in exit_out:
                     exit_outs[f"E={exit_ix}, {k}"] = exit_out[k]
+                    if k == 'logits':
+                        exit_outs['logits'] = exit_out[k]  # Will end up with logits from the final exit
                 exit_ix += 1
 
-        exit_outs['logits'] = self.get_combined_logits(exit_outs)
         return exit_outs
 
-    def get_combined_logits(self, exit_outs):
-        total_logits = 0
-        for exit_ix in range(len(self.exit_block_nums)):
-            logits = exit_outs[f"E={exit_ix}, logits"]
-            total_logits += logits
-        return total_logits
+    def set_final_exit_ix(self, final_exit_ix):
+        """
+        Performs forward pass only upto the specified exit
+        """
+        self.final_exit_ix = final_exit_ix
+        self.final_block_num = self.exit_block_nums[final_exit_ix]
+
+    # def set_final_block_num(self, final_block_num):
+    #     """
+    #     Performs forward pass only upto this block/exit
+    #     """
+    #     self.final_block_num = final_block_num
 
 
 class MultiExitStats:
@@ -262,9 +269,10 @@ class MultiExitStats:
                     'accuracy': Accuracy()
                 }
             logits_key = f'E={exit_ix}, logits'
-            logits = exit_outs[logits_key]
-            # Accuracy on all the samples
-            self.exit_ix_to_stats[exit_ix]['accuracy'].update(logits, gt_ys, class_names, group_names)
+            if logits_key in exit_outs:
+                logits = exit_outs[logits_key]
+                # Accuracy on all the samples
+                self.exit_ix_to_stats[exit_ix]['accuracy'].update(logits, gt_ys, class_names, group_names)
 
     def summary(self, prefix=''):
         exit_to_summary = {}
@@ -285,11 +293,12 @@ class MultiExitPoE(MultiExitModule):
         exit_outs = super().forward(block_num_to_exit_in)
         running_cams = None
         for exit_ix in range(len(self.exit_block_nums)):
-            cams = exit_outs[f"E={exit_ix}, cam"]
-            running_cams = self.update_running_vals(cams, running_cams)
-            exit_outs[f"E={exit_ix}, cam"] = running_cams
-            exit_outs[f"E={exit_ix}, logits"] = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
-            exit_outs[f"logits"] = exit_outs[f"E={exit_ix}, logits"]
+            if f"E={exit_ix}, cam" in exit_outs:
+                cams = exit_outs[f"E={exit_ix}, cam"]
+                running_cams = self.update_running_vals(cams, running_cams)
+                exit_outs[f"E={exit_ix}, cam"] = running_cams
+                exit_outs[f"E={exit_ix}, logits"] = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
+                exit_outs[f"logits"] = exit_outs[f"E={exit_ix}, logits"]
         return exit_outs
 
     def update_running_vals(self, cams, running_cams):
@@ -317,44 +326,45 @@ class MultiExitPoEDetachNormalizePrev(MultiExitPoE):
         self.normalize_cams = True
 
 
-class WeightedPoE(MultiExitModule):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.detach_prev = True
-        self.normalize_cams = False
-
-    def forward(self, block_num_to_exit_in, y=None):
-        exit_outs = super().forward(block_num_to_exit_in)
-        running_cams = None
-        if self.training:
-            assert y is not None
-        for exit_ix in range(len(self.exit_block_nums)):
-            cams = exit_outs[f"E={exit_ix}, cam"]
-            running_cams = self.update_running_vals(cams, running_cams, y)
-            exit_outs[f"E={exit_ix}, cam"] = running_cams
-            exit_outs[f"E={exit_ix}, logits"] = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
-            exit_outs[f"logits"] = exit_outs[f"E={exit_ix}, logits"]
-        return exit_outs
-
-    def update_running_vals(self, cams, running_cams, y=None):
-        if self.normalize_cams:
-            cams = normalize(cams)
-        if running_cams is None:
-            return cams
-        _, _, h, w = cams.shape
-        if self.detach_prev:
-            running_cams = running_cams.detach()
-        running_logits = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
-        if self.training:
-            assert y is not None
-        else:
-            y = torch.argmax(running_logits, dim=1).squeeze().unsqueeze(1)
-        p = torch.gather(F.softmax(running_logits, dim=1), dim=1, index=y).detach().unsqueeze(2).unsqueeze(3)
-        running_cams = p ** self.gamma * interpolate(running_cams, h, w) + cams
-        return running_cams
-
-    def set_gamma(self, gamma):
-        self.gamma = gamma
+#
+# class WeightedPoE(MultiExitModule):
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+#         self.detach_prev = True
+#         self.normalize_cams = False
+#
+#     def forward(self, block_num_to_exit_in, y=None):
+#         exit_outs = super().forward(block_num_to_exit_in)
+#         running_cams = None
+#         if self.training:
+#             assert y is not None
+#         for exit_ix in range(len(self.exit_block_nums)):
+#             cams = exit_outs[f"E={exit_ix}, cam"]
+#             running_cams = self.update_running_vals(cams, running_cams, y)
+#             exit_outs[f"E={exit_ix}, cam"] = running_cams
+#             exit_outs[f"E={exit_ix}, logits"] = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
+#             exit_outs[f"logits"] = exit_outs[f"E={exit_ix}, logits"]
+#         return exit_outs
+#
+#     def update_running_vals(self, cams, running_cams, y=None):
+#         if self.normalize_cams:
+#             cams = normalize(cams)
+#         if running_cams is None:
+#             return cams
+#         _, _, h, w = cams.shape
+#         if self.detach_prev:
+#             running_cams = running_cams.detach()
+#         running_logits = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
+#         if self.training:
+#             assert y is not None
+#         else:
+#             y = torch.argmax(running_logits, dim=1).squeeze().unsqueeze(1)
+#         p = torch.gather(F.softmax(running_logits, dim=1), dim=1, index=y).detach().unsqueeze(2).unsqueeze(3)
+#         running_cams = p ** self.gamma * interpolate(running_cams, h, w) + cams
+#         return running_cams
+#
+#     def set_gamma(self, gamma):
+#         self.gamma = gamma
 
 
 def normalize(tensor, eps=1e-5):

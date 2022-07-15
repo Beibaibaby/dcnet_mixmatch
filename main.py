@@ -66,18 +66,15 @@ def exec(cfg: DictConfig) -> None:
         if 'layerwise' in cfg.trainer.name.lower():
             # Layer wise training
             parent_dir = os.getcwd()
-            for stage in range(trainer.num_exits + 1):
-                logging.getLogger().info(f"STAGE#: {stage}")
-                trainer.stage = stage
-                if stage == 1:
-                    trainer.final_lr = trainer.lr_schedulers().get_lr()[-1]
-                epochs = cfg.optimizer.epochs if stage == 0 else cfg.optimizer.finetuning_epochs
-                stage_dir = os.path.join(parent_dir, f'stage_{stage}')
-                os.makedirs(stage_dir, exist_ok=True)
-                os.chdir(stage_dir)
+            for exit_ix in range(trainer.num_exits):
+                logging.getLogger().info(f"Training blocks/exit for exit#: {exit_ix}")
+                trainer.exit_ix = exit_ix
+                exit_ix_dir = os.path.join(parent_dir, f'exit_ix_{exit_ix}')
+                os.makedirs(exit_ix_dir, exist_ok=True)
+                os.chdir(exit_ix_dir)
                 pl_trainer = pl.Trainer(gpus=cfg.gpus,
-                                        min_epochs=epochs,
-                                        max_epochs=epochs,
+                                        min_epochs=cfg.optimizer.epochs,
+                                        max_epochs=cfg.optimizer.epochs,
                                         check_val_every_n_epoch=cfg.trainer.check_val_every_n_epoch,
                                         num_sanity_val_steps=0,
                                         limit_train_batches=cfg.trainer.limit_train_batches,

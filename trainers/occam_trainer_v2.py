@@ -1,3 +1,4 @@
+import logging
 import os
 from trainers.base_trainer import BaseTrainer
 import torch
@@ -82,6 +83,9 @@ class OccamTrainerV2(BaseTrainer):
             hid_type_to_exit_to_hid_norms = {}
 
             for exit_name in self.model.multi_exit.get_exit_names():
+                logging.getLogger().info(f"Saving for {exit_name}")
+                # if f"{exit_name}, cam" not in model_out:
+                #     continue
                 # Metric for CAM
                 metric_key = f'{prefix}{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
 
@@ -163,6 +167,8 @@ class CELoss():
         """
         loss_dict = {}
         for exit_ix in range(self.num_exits):
+            # if f'E={exit_ix}, logits' not in exit_outs:
+            #     continue
             logits = exit_outs[f'E={exit_ix}, logits']
             # logits = F.adaptive_avg_pool2d(cam, (1)).squeeze()
             _loss = F.cross_entropy(logits, gt_ys.squeeze())
@@ -184,6 +190,8 @@ class CAMCELoss():
         """
         loss_dict = {}
         for exit_ix in range(self.num_exits):
+            # if f'E={exit_ix}, cam' not in exit_outs:
+            #     continue
             cams = exit_outs[f'E={exit_ix}, cam']
             b, c, h, w = cams.shape
             cams = cams.reshape((b, c, h * w))
@@ -220,6 +228,8 @@ class MDCALoss(torch.nn.Module):
     def forward(self, exit_outs, target):
         loss_dict = {}
         for exit_ix in range(self.num_exits):
+            # if f'E={exit_ix}, logits' not in exit_outs:
+            #     continue
             logits = exit_outs[f'E={exit_ix}, logits']
             loss = torch.tensor(0.0).cuda()
             batch, classes = logits.shape
@@ -244,6 +254,8 @@ class CalibrationAnalysis():
         """
         overall_logits = 0
         for exit_ix in range(self.num_exits):
+            # if f'E={exit_ix}, cam' not in exit_outs:
+            #     continue
             cam = exit_outs[f'E={exit_ix}, cam']
             logits = F.adaptive_avg_pool2d(cam, (1)).squeeze().detach().cpu()
             # overall_logits += logits
@@ -268,6 +280,8 @@ class CalibrationAnalysis():
         os.makedirs(save_dir, exist_ok=True)
 
         for exit_ix in self.exit_ix_to_logits:
+            # if exit_ix not in self.exit_ix_to_logits:
+            #     continue
             curr_conf = torch.softmax(self.exit_ix_to_logits[exit_ix].float(), dim=1).numpy()
             ece = ECE(bins).measure(curr_conf, gt_ys)
             diagram.plot(curr_conf, gt_ys, filename=os.path.join(save_dir, f'{exit_ix}.png'),
@@ -281,6 +295,8 @@ class ShapePriorLoss():
     def __call__(self, model_out, y):
         loss_dict = {}
         for exit_ix in range(self.num_exits):
+            # if f'E={exit_ix}, cam' not in model_out:
+            #     continue
             cam = model_out[f'E={exit_ix}, cam']
             gt_cams = get_class_cams_for_occam_nets(cam, y).squeeze()
             gt_cams = gt_cams / gt_cams.max()

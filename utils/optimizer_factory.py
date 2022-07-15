@@ -28,7 +28,7 @@ def build_optimizer(optimizer_name, optim_args, named_params, freeze_layers=None
             if param_dict is None:
                 param_dict = {'params': param, 'lr': optim_args.lr}
             filt_params.append(param_dict)
-            logging.getLogger().debug(f"Added to optimizer: {name}")
+            logging.getLogger().info(f"Added to optimizer: {name}")
         else:
             param.requires_grad = False  # for efficiency
             logging.getLogger().info(f"Removed from optimizer: {name}")
