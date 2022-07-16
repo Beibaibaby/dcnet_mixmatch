@@ -3,7 +3,7 @@ import os
 from trainers.base_trainer import BaseTrainer
 import torch
 import torch.nn.functional as F
-from models.occam_lib_v2 import MultiExitStats
+from models.occam_lib_v2 import MultiExitStats, calc_cam_norm
 from analysis.analyze_segmentation import SegmentationMetrics, save_exitwise_heatmaps
 from utils.cam_utils import get_class_cams_for_occam_nets
 from netcal.presentation import ReliabilityDiagram
@@ -49,6 +49,10 @@ class OccamTrainerV2(BaseTrainer):
             for k in sp_loss_dict:
                 loss += self.trainer_cfg.shape_prior_loss_wt * sp_loss_dict[k]
             self.log_dict(sp_loss_dict, py_logging=False)
+
+        # Log CAM norm
+        for exit_ix in range(self.num_exits):
+            self.log(f'E={exit_ix}, cam_norm', calc_cam_norm(model_out[f'E={exit_ix}, cam']).mean(), py_logging=False)
 
         return loss
 

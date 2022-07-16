@@ -273,6 +273,7 @@ class MultiExitPoE(MultiExitModule):
                 if self.use_cam_norm:
                     cams = normalize_cams(cams, temperature=self.temperature)
                 running_cams = self.update_running_vals(cams, running_cams)
+                running_cams = normalize_cams(running_cams, temperature=self.temperature)
                 exit_outs[f"E={exit_ix}, cam"] = running_cams
                 logits = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
                 exit_outs[f"E={exit_ix}, logits"] = logits
@@ -310,7 +311,7 @@ def normalize_logits(logits, temperature, eps=1e-7):
 
 def calc_cam_norm(cams, eps=1e-7):
     b, c, h, w = cams.shape
-    return torch.norm(cams, dim=1, keepdim=True) + eps
+    return torch.norm(cams, p=2, dim=1, keepdim=True) + eps
 
 
 def normalize_cams(cams, temperature, eps=1e-7):

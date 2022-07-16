@@ -9,7 +9,7 @@ subset_percent=16
 precision=16
 
 for calibration_loss_wt in 0; do
-  for temperature in 1e-3 1e-2 1e-1; do
+  for temperature in 0.05 0.1 1; do
     for model in occam_resnet18_v2_k9753_poe_detach_cam_norm; do
       for main_loss in CELoss; do
           CUDA_VISIBLE_DEVICES=${GPU} python main.py \

@@ -44,7 +44,7 @@ if __name__ == "__main__":
     # m = occam_resnet18_v2_poe_detach_prev(1000)
     # m = occam_resnet18_v2_k3(1000)  # 15205162
     # m = occam_resnet18_v2_k9753(1000)  # 16846794
-    m = occam_resnet18_v2_k9753_same_width(1000)  # 28244954
+    m = occam_resnet18_v2_k9753(1000)  # 28244954
     print(m)
 
     # # https://stackoverflow.com/a/62764464/1122681
