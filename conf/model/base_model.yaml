@@ -3,3 +3,4 @@ pretrained: false
 num_classes: null
 threshold_coeff: 1.0
 gamma: 1.0
+temperature: null

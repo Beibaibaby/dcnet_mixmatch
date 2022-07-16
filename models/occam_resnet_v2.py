@@ -124,7 +124,9 @@ def occam_resnet18_v2_generic(num_classes,
                               exit_strides=[1] * 4,
                               exit_padding=[1] * 4,
                               exit_width_factors=[1] * 4,
-                              cam_width_factors=[1] * 4):
+                              cam_width_factors=[1] * 4,
+                              use_cam_norm=False,
+                              temperature=None):
     return occam_resnet18_v2(num_classes, multi_exit_type=multi_exit_type,
                              exits_kwargs={
                                  'exit_initial_conv_type': exit_initial_conv_type,
@@ -132,7 +134,9 @@ def occam_resnet18_v2_generic(num_classes,
                                  'exit_strides': exit_strides,
                                  'exit_width_factors': exit_width_factors,
                                  'cam_width_factors': cam_width_factors,
-                                 'exit_padding': exit_padding
+                                 'exit_padding': exit_padding,
+                                 'use_cam_norm': use_cam_norm,
+                                 'temperature': temperature
                              })
 
 
@@ -143,58 +147,37 @@ def occam_resnet18_v2_k9753(num_classes):
                                      exit_padding=[5, 4, 3, 2])
 
 
-def occam_resnet18_v2_k9753_same_width(num_classes, multi_exit_type=MultiExitModule):
+def occam_resnet18_v2_k9753_same_width(num_classes, multi_exit_type=MultiExitModule,
+                                       **kwargs):
     return occam_resnet18_v2_generic(num_classes,
                                      multi_exit_type=multi_exit_type,
                                      kernel_sizes=[9, 7, 5, 3],
                                      exit_strides=[4, 3, 2, 1],
                                      exit_padding=[5, 4, 3, 2],
                                      exit_width_factors=[8, 4, 2, 1],
-                                     cam_width_factors=[8, 4, 2, 1])
+                                     cam_width_factors=[8, 4, 2, 1],
+                                     **kwargs)
 
 
 def occam_resnet18_v2_k9753_same_width_poe(num_classes):
     return occam_resnet18_v2_k9753_same_width(num_classes, multi_exit_type=MultiExitPoE)
 
 
+def occam_resnet18_v2_k9753_poe_cam_norm(num_classes, temperature):
+    return occam_resnet18_v2_k9753_same_width(num_classes, multi_exit_type=MultiExitPoE,
+                                              use_cam_norm=True,
+                                              temperature=temperature)
+
+
 def occam_resnet18_v2_k9753_same_width_poe_detach(num_classes):
     return occam_resnet18_v2_k9753_same_width(num_classes, multi_exit_type=MultiExitPoEDetachPrev)
 
 
-# def occam_resnet18_v2_k9753_poe_detach_norm(num_classes):
-#     return occam_resnet18_v2_generic(num_classes, multi_exit_type=MultiExitPoEDetachNormalizePrev)
-
-
-# def occam_resnet18_v2_k9753_weighted_poe_detach(num_classes, gamma=1.0):
-#     m = occam_resnet18_v2_generic(num_classes, multi_exit_type=WeightedPoE)
-#     m.multi_exit.set_gamma(gamma)
-#     return m
-
-
-# def occam_resnet18_v2_k3(num_classes):
-#     return occam_resnet18_v2_generic(num_classes)
-
-
-# def occam_resnet18_v2_k3_poe(num_classes):
-#     return occam_resnet18_v2_generic(num_classes, multi_exit_type=MultiExitPoE)
-
-
-# def occam_resnet18_v2_depthwise9_generic(num_classes,
-#                                          multi_exit_type,
-#                                          kernel_sizes=[9, 7, 5, 3],
-#                                          exit_strides=[9, 7, 5, 3],
-#                                          exit_padding=[5, 4, 3, 2],
-#                                          exit_width_factors=[1] * 4,
-#                                          cam_width_factors=[1] * 4):
-#     return occam_resnet18_v2(num_classes, multi_exit_type=multi_exit_type,
-#                              exits_kwargs={
-#                                  'exit_initial_conv_type': DepthWiseConv2,
-#                                  'exit_kernel_sizes': kernel_sizes,
-#                                  'exit_strides': exit_strides,
-#                                  'exit_width_factors': exit_width_factors,
-#                                  'cam_width_factors': cam_width_factors,
-#                                  'exit_padding': exit_padding
-#                              })
+def occam_resnet18_v2_k9753_poe_detach_cam_norm(num_classes, temperature):
+    return occam_resnet18_v2_k9753_same_width(num_classes,
+                                              multi_exit_type=MultiExitPoEDetachPrev,
+                                              use_cam_norm=True,
+                                              temperature=temperature)
 
 
 if __name__ == "__main__":
