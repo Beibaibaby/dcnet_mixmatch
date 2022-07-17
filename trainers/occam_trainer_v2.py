@@ -31,6 +31,10 @@ class OccamTrainerV2(BaseTrainer):
         if self.trainer_cfg.main_loss == 'CAMCELoss':
             main_loss_fn = CAMCELoss(self.num_exits, thresh_coeff=self.trainer_cfg.thresh_coeff,
                                      fg_wt=self.trainer_cfg.fg_wt, bg_wt=self.trainer_cfg.bg_wt)
+        elif self.trainer_cfg.main_loss == 'MultiExitFocalLoss':
+            main_loss_fn = MultiExitFocalLoss(self.num_exits,
+                                              gamma=self.trainer_cfg.gamma,
+                                              detach=self.trainer_cfg.detach_prev)
         else:
             main_loss_fn = eval(self.trainer_cfg.main_loss)(self.num_exits)
         main_loss_dict = main_loss_fn(model_out, batch['y'])
@@ -172,6 +176,34 @@ class CELoss():
             logits = exit_outs[f'E={exit_ix}, logits']
             _loss = F.cross_entropy(logits, gt_ys.squeeze())
             loss_dict[f'E={exit_ix}, ce'] = _loss
+        return loss_dict
+
+
+class MultiExitFocalLoss():
+    """
+    Uses p_gt from previous exits to weigh the loss
+    """
+
+    def __init__(self, num_exits, gamma, detach):
+        self.num_exits = num_exits
+        self.gamma = gamma
+        self.detach = detach
+
+    def __call__(self, exit_outs, gt_ys):
+        gt_ys = gt_ys.view(-1, 1)
+        loss_dict = {}
+        running_logits = None
+        for exit_ix in range(self.num_exits):
+            logits = exit_outs[f'E={exit_ix}, logits']
+            if exit_ix == 0:
+                loss = F.cross_entropy(logits, gt_ys.squeeze())
+                running_logits = logits
+            else:
+                logpt = F.log_softmax(running_logits, dim=1).gather(1, gt_ys).view(-1)
+                p_gt = logpt.exp().detach() if self.detach else logpt.exp()
+                loss = -1 * (1 - p_gt) ** self.gamma * logpt
+                running_logits += logits
+            loss_dict[f'E={exit_ix}, main'] = loss.mean()
         return loss_dict
 
 

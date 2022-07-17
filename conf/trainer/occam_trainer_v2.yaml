@@ -4,6 +4,8 @@ name: OccamTrainerV2
 main_loss: CELoss
 calibration_loss: null
 calibration_loss_wt: 0.0
+gamma: 0
+detach_prev: True
 shape_prior_loss_wt: 0
 # CAM CE Loss params
 thresh_coeff: 1.0
