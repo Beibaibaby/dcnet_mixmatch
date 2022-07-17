@@ -22,7 +22,7 @@ for calibration_loss_wt in 0; do
           dataset=${dataset} \
           dataset.subset_percent=${subset_percent} \
           optimizer=${optim} \
-          expt_suffix=tmp_${main_loss}_temp_${temperature}_${calibration_loss_wt}_subset_${subset_percent}_prec_${precision}
+          expt_suffix=${main_loss}_temp_${temperature}_${calibration_loss_wt}_subset_${subset_percent}_prec_${precision}
       done
     done
   done

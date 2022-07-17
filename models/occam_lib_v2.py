@@ -151,9 +151,7 @@ class MultiExitModule(nn.Module):
             exit_scale_factors=[1] * 4,
             exit_kernel_sizes=[3] * 4,
             exit_strides=[None] * 4,
-            exit_padding=[None] * 4,
-            temperature=None,
-            use_logit_norm=False
+            exit_padding=[None] * 4
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -179,8 +177,6 @@ class MultiExitModule(nn.Module):
         self.exit_kernel_sizes = exit_kernel_sizes
         self.exit_strides = exit_strides
         self.exit_padding = exit_padding
-        self.temperature = temperature
-        self.use_logit_norm = use_logit_norm
         self.exits = []
 
     def build_and_add_exit(self, in_dims):
@@ -218,9 +214,6 @@ class MultiExitModule(nn.Module):
                 if exit_ix in self.detached_exit_ixs:
                     exit_in = exit_in.detach()
                 exit_out = self.exits[exit_ix](exit_in, y=y)
-                if self.use_logit_norm:
-                    exit_out['logits'] = normalize_logits(F.adaptive_avg_pool2d(exit_out['cam'], 1).squeeze(),
-                                                          self.temperature)
                 for k in exit_out:
                     multi_exit_out[f"E={exit_ix}, {k}"] = exit_out[k]
                 multi_exit_out['logits'] = exit_out['logits']
@@ -260,11 +253,7 @@ class MultiExitPoE(MultiExitModule):
                                         cams.shape[2], cams.shape[3])
             combo_cams = combo_cams_in + cams
             logits = F.adaptive_avg_pool2d(cams, 1).squeeze()
-            # if self.use_logit_norm:
-            #     logits = normalize_logits(logits, temperature=self.temperature)
-            combo_logits = combo_logits_in + logits
-        if self.use_logit_norm:
-            combo_logits = normalize_logits(combo_logits, self.temperature)
+            combo_logits = combo_logits_in.detach() if self.detach_prev else combo_logits_in + logits
         return combo_cams, combo_logits
 
 
