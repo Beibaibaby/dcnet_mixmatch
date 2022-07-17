@@ -9,8 +9,8 @@ subset_percent=16
 precision=16
 
 for calibration_loss_wt in 0; do
-  for temperature in 0.05 0.1 1; do
-    for model in occam_resnet18_v2_k9753_cam_norm; do
+  for temperature in 0.01 0.05 0.1; do
+    for model in occam_resnet18_v2_k9753_logit_norm; do
       for main_loss in CELoss; do
           CUDA_VISIBLE_DEVICES=${GPU} python main.py \
           model.name=${model} \
@@ -22,7 +22,7 @@ for calibration_loss_wt in 0; do
           dataset=${dataset} \
           dataset.subset_percent=${subset_percent} \
           optimizer=${optim} \
-          expt_suffix=${main_loss}_temp_${temperature}_${calibration_loss_wt}_subset_${subset_percent}_prec_${precision}
+          expt_suffix=tmp_${main_loss}_temp_${temperature}_${calibration_loss_wt}_subset_${subset_percent}_prec_${precision}
       done
     done
   done

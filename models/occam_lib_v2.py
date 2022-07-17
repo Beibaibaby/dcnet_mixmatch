@@ -9,30 +9,6 @@ def build_non_linearity(non_linearity_type, num_features):
     return non_linearity_type()
 
 
-# class Conv2(nn.Module):
-#     def __init__(self, in_features, hid_features, out_features, norm_type=nn.BatchNorm2d, non_linearity_type=nn.ReLU,
-#                  groups=1, conv_type=nn.Conv2d, kernel_size=3, stride=1, padding=1):
-#         super(Conv2, self).__init__()
-#         if padding is None:
-#             padding = kernel_size // 2
-#         self.conv1 = conv_type(in_channels=in_features, out_channels=hid_features, kernel_size=kernel_size,
-#                                stride=stride,
-#                                padding=padding,
-#                                groups=groups)
-#         self.norm1 = norm_type(hid_features)
-#         self.non_linear1 = build_non_linearity(non_linearity_type, hid_features)
-#         self.conv2 = nn.Conv2d(in_channels=hid_features, out_channels=out_features, kernel_size=kernel_size,
-#                                stride=stride,
-#                                padding=kernel_size // 2,
-#                                groups=groups)
-#
-#     def forward(self, x):
-#         x = self.conv1(x)
-#         x = self.norm1(x)
-#         x = self.non_linear1(x)
-#         x = self.conv2(x)
-#         return x
-
 class Conv2(nn.Module):
     def __init__(self, in_features, hid_features, out_features, norm_type=nn.BatchNorm2d, non_linearity_type=nn.ReLU,
                  conv_type=nn.Conv2d, kernel_size=3, stride=None, padding=None):
@@ -177,7 +153,7 @@ class MultiExitModule(nn.Module):
             exit_strides=[None] * 4,
             exit_padding=[None] * 4,
             temperature=None,
-            use_cam_norm=False
+            use_logit_norm=False
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -204,7 +180,7 @@ class MultiExitModule(nn.Module):
         self.exit_strides = exit_strides
         self.exit_padding = exit_padding
         self.temperature = temperature
-        self.use_cam_norm = use_cam_norm
+        self.use_logit_norm = use_logit_norm
         self.exits = []
 
     def build_and_add_exit(self, in_dims):
@@ -242,9 +218,9 @@ class MultiExitModule(nn.Module):
                 if exit_ix in self.detached_exit_ixs:
                     exit_in = exit_in.detach()
                 exit_out = self.exits[exit_ix](exit_in, y=y)
-                if self.use_cam_norm:
-                    exit_out['cam'] = normalize_cams(exit_out['cam'], self.temperature)
-                    exit_out['logits'] = F.adaptive_avg_pool2d(exit_out['cam'], 1).squeeze()
+                if self.use_logit_norm:
+                    exit_out['logits'] = normalize_logits(F.adaptive_avg_pool2d(exit_out['cam'], 1).squeeze(),
+                                                          self.temperature)
                 for k in exit_out:
                     multi_exit_out[f"E={exit_ix}, {k}"] = exit_out[k]
                 multi_exit_out['logits'] = exit_out['logits']
@@ -266,33 +242,30 @@ class MultiExitPoE(MultiExitModule):
 
     def forward(self, block_num_to_exit_in, y=None):
         exit_outs = super().forward(block_num_to_exit_in)
-        running_cams = None
+        combo_cams, combo_logits = None, None
         for exit_ix in range(len(self.exit_block_nums)):
             if f"E={exit_ix}, cam" in exit_outs:
-                cams = exit_outs[f"E={exit_ix}, cam"]
-                if self.use_cam_norm:
-                    cams = normalize_cams(cams, temperature=self.temperature)
-                running_cams = self.update_running_vals(cams, running_cams)
-                running_cams = normalize_cams(running_cams, temperature=self.temperature)
-                exit_outs[f"E={exit_ix}, cam"] = running_cams
-                logits = F.adaptive_avg_pool2d(running_cams, output_size=1).squeeze()
-                exit_outs[f"E={exit_ix}, logits"] = logits
-                exit_outs["logits"] = logits
+                combo_cams, combo_logits = self.get_combined_cams_and_logits(exit_outs[f"E={exit_ix}, cam"],
+                                                                             combo_cams, combo_logits)
+                exit_outs[f"E={exit_ix}, cam"] = combo_cams
+                exit_outs[f"E={exit_ix}, logits"] = combo_logits
+                exit_outs["logits"] = combo_logits
         return exit_outs
 
-    def update_running_vals(self, cams, running_cams):
-        if running_cams is None:
-            return cams
-        _, _, h, w = cams.shape
-        if self.detach_prev:
-            running_cams = running_cams.detach()
-        running_cams = interpolate(running_cams, h, w)
-        if self.use_cam_norm:
-            running_cams = normalize_cams(running_cams, temperature=self.temperature)
-        # logging.getLogger().info(f"cams {calc_cam_norm(cams).mean()}, running {calc_cam_norm(running_cams).mean()}")
-
-        running_cams = running_cams + cams
-        return running_cams
+    def get_combined_cams_and_logits(self, cams, combo_cams_in, combo_logits_in):
+        if combo_cams_in is None:
+            combo_cams, combo_logits = cams, F.adaptive_avg_pool2d(cams, 1).squeeze()
+        else:
+            combo_cams_in = interpolate(combo_cams_in.detach() if self.detach_prev else combo_cams_in,
+                                        cams.shape[2], cams.shape[3])
+            combo_cams = combo_cams_in + cams
+            logits = F.adaptive_avg_pool2d(cams, 1).squeeze()
+            # if self.use_logit_norm:
+            #     logits = normalize_logits(logits, temperature=self.temperature)
+            combo_logits = combo_logits_in + logits
+        if self.use_logit_norm:
+            combo_logits = normalize_logits(combo_logits, self.temperature)
+        return combo_cams, combo_logits
 
 
 class MultiExitPoEDetachPrev(MultiExitPoE):
@@ -306,7 +279,7 @@ def calc_logits_norm(logits, eps=1e-7):
 
 
 def normalize_logits(logits, temperature, eps=1e-7):
-    return torch.div(logits, calc_logits_norm(logits, eps)) / temperature
+    return torch.div(logits, calc_logits_norm(logits, eps).detach()) / temperature
 
 
 def calc_cam_norm(cams, eps=1e-7):

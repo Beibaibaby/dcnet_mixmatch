@@ -10,7 +10,7 @@ from models.occam_resnet_v2 import *
 
 
 def build_model(model_config):
-    if 'cam_norm' in model_config.name:
+    if 'logit_norm' in model_config.name:
         m = eval(model_config.name)(model_config.num_classes, model_config.temperature)
     elif 'occam' in model_config.name:  # or 'resnet' in model_config.name:
         m = eval(model_config.name)(model_config.num_classes)

@@ -9,8 +9,8 @@ subset_percent=16
 precision=16
 
 for calibration_loss_wt in 0; do
-  for temperature in 0.05 0.1 1; do
-    for model in occam_resnet18_v2_k9753_poe_cam_norm; do
+  for temperature in 0.01 0.05 0.1; do
+    for model in occam_resnet18_v2_k9753_poe_logit_norm; do
       for main_loss in CELoss; do
           CUDA_VISIBLE_DEVICES=${GPU} python main.py \
           model.name=${model} \
@@ -27,10 +27,3 @@ for calibration_loss_wt in 0; do
     done
   done
 done
-
-#  \
-#          trainer.limit_train_batches=2 \
-#          trainer.limit_val_batches=2 \
-#          trainer.limit_test_batches=2 \
-#          optimizer.epochs=2 \
-#          trainer.check_val_every_n_epoch=1

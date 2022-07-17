@@ -3,7 +3,7 @@ import os
 from trainers.base_trainer import BaseTrainer
 import torch
 import torch.nn.functional as F
-from models.occam_lib_v2 import MultiExitStats, calc_cam_norm
+from models.occam_lib_v2 import MultiExitStats, calc_logits_norm
 from analysis.analyze_segmentation import SegmentationMetrics, save_exitwise_heatmaps
 from utils.cam_utils import get_class_cams_for_occam_nets
 from netcal.presentation import ReliabilityDiagram
@@ -52,8 +52,8 @@ class OccamTrainerV2(BaseTrainer):
 
         # Log CAM norm
         for exit_ix in range(self.num_exits):
-            self.log(f'E={exit_ix}, cam_norm', calc_cam_norm(model_out[f'E={exit_ix}, cam']).mean(), py_logging=False)
-
+            self.log(f'E={exit_ix}, logits_norm', calc_logits_norm(model_out[f'E={exit_ix}, logits']).mean(),
+                     py_logging=False)
         return loss
 
     def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None):
@@ -248,9 +248,7 @@ class CalibrationAnalysis():
         Gather per-exit + overall logits
         """
         for exit_ix in range(self.num_exits):
-            cam = exit_outs[f'E={exit_ix}, cam']
-            logits = F.adaptive_avg_pool2d(cam, (1)).squeeze().detach().cpu()
-
+            logits = exit_outs[f'E={exit_ix}, logits'].squeeze().detach().cpu()
             if f'E={exit_ix}' not in self.exit_ix_to_logits:
                 self.exit_ix_to_logits[f'E={exit_ix}'] = logits
             else:
