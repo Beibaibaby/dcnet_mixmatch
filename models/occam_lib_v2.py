@@ -140,7 +140,7 @@ class MultiExitModule(nn.Module):
 
     def __init__(
             self,
-            detached_exit_ixs=[],
+            detached_exit_ixs=[0],
             exit_out_dims=None,
             exit_block_nums=[0, 1, 2, 3],
             exit_type=ExitModule,

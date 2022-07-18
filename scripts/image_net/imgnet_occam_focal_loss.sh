@@ -9,10 +9,10 @@ subset_percent=16
 precision=16
 
 for calibration_loss_wt in 0; do
-  for gamma in 1 0 2; do
+  for gamma in 1 2 3; do
     for detach_prev in True; do
       for model in occam_resnet18_v2_k9753; do
-        for main_loss in MultiExitFocalLoss; do
+        for main_loss in OccamFocalLoss; do
           for calibration_loss in MDCALoss; do
             CUDA_VISIBLE_DEVICES=${GPU} python main.py \
             model.name=${model} \

@@ -124,7 +124,8 @@ def occam_resnet18_v2_generic(num_classes,
                               exit_strides=[1] * 4,
                               exit_padding=[1] * 4,
                               exit_width_factors=[1] * 4,
-                              cam_width_factors=[1] * 4):
+                              cam_width_factors=[1] * 4,
+                              detached_exit_ixs=[0]):
     return occam_resnet18_v2(num_classes, multi_exit_type=multi_exit_type,
                              exits_kwargs={
                                  'exit_initial_conv_type': exit_initial_conv_type,
@@ -132,7 +133,8 @@ def occam_resnet18_v2_generic(num_classes,
                                  'exit_strides': exit_strides,
                                  'exit_width_factors': exit_width_factors,
                                  'cam_width_factors': cam_width_factors,
-                                 'exit_padding': exit_padding
+                                 'exit_padding': exit_padding,
+                                 'detached_exit_ixs': detached_exit_ixs
                              })
 
 
