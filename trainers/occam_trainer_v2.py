@@ -221,20 +221,14 @@ class OccamFocalLoss():
 
     def __call__(self, exit_outs, gt_ys):
         gt_ys = gt_ys.view(-1, 1)
-        loss_dict, prev_logits = {}, None
+        loss_dict, prev_p_gt = {}, 0
 
         for exit_ix in range(self.num_exits):
             logits = exit_outs[f'E={exit_ix}, logits']
             logpt = F.log_softmax(logits, dim=1).gather(1, gt_ys).view(-1)
-
-            if exit_ix == 0:
-                loss = - (logpt.exp() ** self.gamma) * logpt
-                prev_logits = logits
-            else:
-                prev_logpt = F.log_softmax(prev_logits, dim=1).gather(1, gt_ys).view(-1)
-                prev_p_gt = prev_logpt.exp().detach() if self.detach else prev_logpt.exp()
-                loss = - ((1 - prev_p_gt) / (1 - prev_p_gt).max()) ** self.gamma * logpt
-                prev_logits += logits
+            wt = logpt.exp() if exit_ix == 0 else (1 - prev_p_gt)/(1 - prev_p_gt).max()
+            loss = - wt ** self.gamma * logpt
+            prev_p_gt += logpt.exp().detach() if self.detach else logpt.exp()
             loss_dict[f'E={exit_ix}, main'] = loss.mean()
         return loss_dict
 
