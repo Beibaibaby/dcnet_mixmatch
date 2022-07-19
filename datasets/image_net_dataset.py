@@ -164,15 +164,15 @@ class ImageNetDataset(Dataset):
 
 
 def create_image_net_dataset_for_split(dataset_cfg, split):
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                                  std=[0.229, 0.224, 0.225])
 
     data_dir = dataset_cfg.data_dir
 
     if 'train' in split.lower():
         augmentation_cfg = dataset_cfg.augmentations
         train_transform = build_transformation_list(augmentation_cfg, image_size=dataset_cfg.image_size)[0]
-        train_transform.append(normalize)
+        # train_transform.append(normalize)
         train_transform = transforms.Compose(train_transform)
         return ImageNetDataset(data_dir,
                                'train',
@@ -186,7 +186,8 @@ def create_image_net_dataset_for_split(dataset_cfg, split):
             transforms.Resize(256),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
-            normalize]
+            ]
+            # normalize]
         )
         mask_transform = transforms.Compose([
             transforms.Resize(256),

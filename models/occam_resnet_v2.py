@@ -15,7 +15,9 @@ class OccamResNetV2(VariableWidthResNet):
             use_initial_max_pooling=True,
             # Exits
             multi_exit_type=MultiExitModule,
-            exits_kwargs=None
+            exits_kwargs=None,
+            # Others
+            input_channels=3
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -29,7 +31,8 @@ class OccamResNetV2(VariableWidthResNet):
                          initial_kernel_size=initial_kernel_size,
                          initial_stride=initial_stride,
                          initial_padding=initial_padding,
-                         use_initial_max_pooling=use_initial_max_pooling)
+                         use_initial_max_pooling=use_initial_max_pooling,
+                         input_channels=input_channels)
         self.exits_cfg = exits_kwargs
         del self.fc
 
@@ -107,14 +110,16 @@ def occam_resnet18_img64_v2(num_classes, width=58, multi_exit_type=MultiExitModu
                          exits_kwargs=exits_kwargs)
 
 
-def occam_resnet18_v2(num_classes, width=58, multi_exit_type=MultiExitModule, exits_kwargs={}):
+def occam_resnet18_v2(num_classes, width=58, multi_exit_type=MultiExitModule, exits_kwargs={},
+                      **kwargs):
     if 'exit_out_dims' not in exits_kwargs:
         exits_kwargs['exit_out_dims'] = num_classes
     return OccamResNetV2(block=BasicBlock,
                          layers=[2, 2, 2, 2],
                          width=width,
                          multi_exit_type=multi_exit_type,
-                         exits_kwargs=exits_kwargs)
+                         exits_kwargs=exits_kwargs,
+                         **kwargs)
 
 
 def occam_resnet18_v2_generic(num_classes,
@@ -125,7 +130,8 @@ def occam_resnet18_v2_generic(num_classes,
                               exit_padding=[1] * 4,
                               exit_width_factors=[1] * 4,
                               cam_width_factors=[1] * 4,
-                              detached_exit_ixs=[0]):
+                              detached_exit_ixs=[0],
+                              input_channels=3):
     return occam_resnet18_v2(num_classes, multi_exit_type=multi_exit_type,
                              exits_kwargs={
                                  'exit_initial_conv_type': exit_initial_conv_type,
@@ -135,7 +141,8 @@ def occam_resnet18_v2_generic(num_classes,
                                  'cam_width_factors': cam_width_factors,
                                  'exit_padding': exit_padding,
                                  'detached_exit_ixs': detached_exit_ixs
-                             })
+                             },
+                             input_channels=input_channels)
 
 
 # def occam_resnet18_v2_k9753(num_classes):
@@ -178,11 +185,9 @@ def occam_resnet18_v2_k9753_poe_detach(num_classes):
     return occam_resnet18_v2_k9753(num_classes, multi_exit_type=MultiExitPoEDetachPrev)
 
 
-# def occam_resnet18_v2_k9753_poe_detach_logit_norm(num_classes, temperature):
-#     return occam_resnet18_v2_k9753(num_classes,
-#                                    multi_exit_type=MultiExitPoEDetachPrev,
-#                                    use_logit_norm=True,
-#                                    temperature=temperature)
+def occam_resnet18_v2_in_6(num_classes):
+    return occam_resnet18_v2_k9753(num_classes,
+                                   input_channels=6)
 
 
 if __name__ == "__main__":

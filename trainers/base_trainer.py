@@ -29,12 +29,12 @@ class BaseTrainer(pl.LightningModule):
         self.model = model_factory.build_model(self.config.model)
         print(self.model)
 
-    def forward(self, x, batch=None):
+    def forward(self, x, batch=None, batch_idx=None):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop. It is independent of forward
-        model_out = self(batch['x'], batch)
+        model_out = self(batch['x'], batch, batch_idx)
         loss = self.compute_main_loss(batch, batch_idx, model_out)
         self.log('loss', loss, on_epoch=True, batch_size=self.config.dataset.batch_size, py_logging=False)
         return loss
@@ -48,7 +48,7 @@ class BaseTrainer(pl.LightningModule):
     def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_out=None, loader_key=None,
                                prefix=''):
         if model_out is None:
-            model_out = self(batch['x'], batch)
+            model_out = self(batch['x'], batch, batch_idx)
         if loader_key is None:
             loader_key = self.get_loader_key(split, dataloader_idx)
 
