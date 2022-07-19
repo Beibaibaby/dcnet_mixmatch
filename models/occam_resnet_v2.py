@@ -17,7 +17,8 @@ class OccamResNetV2(VariableWidthResNet):
             multi_exit_type=MultiExitModule,
             exits_kwargs=None,
             # Others
-            input_channels=3
+            num_views=1,
+            separate_views_upto=0
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -32,7 +33,8 @@ class OccamResNetV2(VariableWidthResNet):
                          initial_stride=initial_stride,
                          initial_padding=initial_padding,
                          use_initial_max_pooling=use_initial_max_pooling,
-                         input_channels=input_channels)
+                         num_views=num_views,
+                         separate_views_upto=separate_views_upto)
         self.exits_cfg = exits_kwargs
         del self.fc
 
@@ -131,7 +133,8 @@ def occam_resnet18_v2_generic(num_classes,
                               exit_width_factors=[1] * 4,
                               cam_width_factors=[1] * 4,
                               detached_exit_ixs=[0],
-                              input_channels=3):
+                              num_views=1,
+                              separate_views_upto=0):
     return occam_resnet18_v2(num_classes, multi_exit_type=multi_exit_type,
                              exits_kwargs={
                                  'exit_initial_conv_type': exit_initial_conv_type,
@@ -142,7 +145,8 @@ def occam_resnet18_v2_generic(num_classes,
                                  'exit_padding': exit_padding,
                                  'detached_exit_ixs': detached_exit_ixs
                              },
-                             input_channels=input_channels)
+                             num_views=num_views,
+                             separate_views_upto=separate_views_upto)
 
 
 # def occam_resnet18_v2_k9753(num_classes):
@@ -188,6 +192,25 @@ def occam_resnet18_v2_k9753_poe_detach(num_classes):
 def occam_resnet18_v2_in_6(num_classes):
     return occam_resnet18_v2_k9753(num_classes,
                                    input_channels=6)
+
+
+def occam_resnet18_v2_k9753_n_views(num_classes, num_views):
+    return occam_resnet18_v2_k9753(num_classes,
+                                   num_views=num_views)
+
+
+def occam_resnet18_v2_k9753_2_views_no_sep(num_classes):
+    return occam_resnet18_v2_k9753(num_classes,
+                                   num_views=2,
+                                   separate_views_upto=-1
+                                   )
+
+
+def occam_resnet18_v2_k9753_2_views_sep_0(num_classes):
+    return occam_resnet18_v2_k9753(num_classes,
+                                   num_views=2,
+                                   separate_views_upto=0
+                                   )
 
 
 if __name__ == "__main__":

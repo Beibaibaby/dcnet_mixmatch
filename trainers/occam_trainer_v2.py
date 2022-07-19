@@ -91,7 +91,7 @@ class OccamTrainerV2(BaseTrainer):
             hid_type_to_exit_to_hid_norms = {}
 
             for exit_name in self.model.multi_exit.get_exit_names():
-                logging.getLogger().info(f"Saving for {exit_name}")
+                # logging.getLogger().info(f"Saving for {exit_name}")
                 # Metric for CAM
                 metric_key = f'{prefix}{cls_type}_{exit_name}_{split}_{loader_key}_segmentation_metrics'
 
