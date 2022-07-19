@@ -19,11 +19,7 @@ dataset=${dataset} \
 dataset.subset_percent=${subset_percent} \
 optimizer=${optim} \
 expt_suffix=view_${view}_subset_${subset_percent}_prec_${precision} \
-trainer.input_views=[${view}] \
-trainer.limit_train_batches=2 \
-trainer.limit_val_batches=2 \
-trainer.limit_test_batches=2 \
-trainer.check_val_every_n_epoch=1
+trainer.input_views=[${view}]
 
 view='grayscale'
 CUDA_VISIBLE_DEVICES=${GPU} python main.py \
