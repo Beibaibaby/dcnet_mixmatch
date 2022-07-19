@@ -228,7 +228,7 @@ class OccamFocalLoss():
             logpt = F.log_softmax(logits, dim=1).gather(1, gt_ys).view(-1)
             wt = logpt.exp() if exit_ix == 0 else (1 - prev_p_gt)/(1 - prev_p_gt).max()
             loss = - wt ** self.gamma * logpt
-            prev_p_gt += logpt.exp().detach() if self.detach else logpt.exp()
+            prev_p_gt *= logpt.exp().detach() if self.detach else logpt.exp()
             loss_dict[f'E={exit_ix}, main'] = loss.mean()
         return loss_dict
 
