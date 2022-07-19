@@ -23,20 +23,38 @@ class OccamTrainerV2MultiIn(OccamTrainerV2):
         self.sobel = Sobel()
 
     def create_views(self, x):
-        # Send in original and edge (Sobel filter) views
-        sigma = self.trainer_cfg.blur_sigma
-        # sobel_x = interpolate(x, 2 * x.shape[2], 2 * x.shape[3])
-        sobel_x = x
-        sobel_x = GaussianBlur(kernel_size=3, sigma=(sigma, sigma))(sobel_x)
-        sobel_x = self.sobel(sobel_x.mean(dim=1, keepdims=True)).repeat(1, 3, 1, 1)
-        # sobel_x = interpolate(sobel_x, x.shape[2], x.shape[3])
-        return torch.cat((x, sobel_x), dim=1)
+        if not hasattr(self, 'views_saved'):
+            self.views_saved = False
+
+        x_list = []
+        for v in self.trainer_cfg.input_views:
+            if v == 'rgb':
+                out_x = x
+            elif v == 'edge':
+                sigma = self.trainer_cfg.blur_sigma
+                out_x = x
+                out_x = GaussianBlur(kernel_size=3, sigma=(sigma, sigma))(out_x)
+                out_x = self.sobel(out_x.mean(dim=1, keepdims=True)).repeat(1, 3, 1, 1)
+            elif v == 'grayscale':
+                out_x = x.mean(dim=1).unsqueeze(1).repeat(1, 3, 1, 1)
+            x_list.append(out_x)
+
+            if not self.training and not self.views_saved:
+                self.save_views(out_x, os.path.join(os.getcwd(), f'viz_{v}'))
+
+        if not self.training:
+            self.views_saved = True
+        return torch.cat(x_list, dim=1)
 
     def forward(self, x, batch=None, batch_idx=None):
         x = self.create_views(x)
-        if self.current_epoch < 2 and self.training and batch_idx == 0:
-            save_views(x, os.path.join(os.getcwd(), f'viz_views_ep_{self.current_epoch}'))
         return self.model(x, batch['y'])
+
+    def save_views(self, views, save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+        for ix in range(len(views)):
+            save_img(views[ix].detach().cpu().permute(1, 2, 0).numpy(),
+                     os.path.join(save_dir, f'{ix}.jpg'))
 
 
 class Sobel(nn.Module):
@@ -61,15 +79,6 @@ class Sobel(nn.Module):
         x = torch.sum(x, dim=1, keepdim=True)
         x = torch.sqrt(x)
         return x
-
-
-def save_views(views, save_dir):
-    orig = views[:, 0:3]
-    sobel = views[:, 3:]
-    os.makedirs(save_dir, exist_ok=True)
-    for ix in range(len(views)):
-        save_img(orig[ix].detach().cpu().permute(1, 2, 0).numpy(), os.path.join(save_dir, f'{ix}_orig.jpg'))
-        save_img(sobel[ix].detach().cpu().permute(1, 2, 0).numpy(), os.path.join(save_dir, f'{ix}_sobel.jpg'))
 
 
 def save_img(img, save_file):
