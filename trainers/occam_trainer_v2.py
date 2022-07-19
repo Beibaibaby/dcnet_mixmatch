@@ -44,7 +44,8 @@ class OccamTrainerV2(BaseTrainer):
         if self.trainer_cfg.calibration_loss is not None:
             cal_loss_dict = eval(self.trainer_cfg.calibration_loss)(self.num_exits)(model_out, batch['y'])
             for cl in cal_loss_dict:
-                loss += self.trainer_cfg.calibration_loss_wt * cal_loss_dict[cl]
+                cal_loss_dict[cl] = self.trainer_cfg.calibration_loss_wt * cal_loss_dict[cl]
+                loss += cal_loss_dict[cl]
             self.log_dict(cal_loss_dict, py_logging=False)
 
         if self.trainer_cfg.shape_prior_loss_wt > 0:
@@ -226,7 +227,7 @@ class OccamFocalLoss():
         for exit_ix in range(self.num_exits):
             logits = exit_outs[f'E={exit_ix}, logits']
             logpt = F.log_softmax(logits, dim=1).gather(1, gt_ys).view(-1)
-            wt = logpt.exp() if exit_ix == 0 else (1 - prev_p_gt)/(1 - prev_p_gt).max()
+            wt = logpt.exp() if exit_ix == 0 else (1 - prev_p_gt) / (1 - prev_p_gt).max()
             loss = - wt ** self.gamma * logpt
             prev_p_gt *= logpt.exp().detach() if self.detach else logpt.exp()
             loss_dict[f'E={exit_ix}, main'] = loss.mean()
