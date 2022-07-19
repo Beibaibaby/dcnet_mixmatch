@@ -1,5 +1,6 @@
 import logging
 
+import torch
 import torch.nn as nn
 from utils.metrics import Accuracy
 from utils.cam_utils import *
@@ -151,7 +152,8 @@ class MultiExitModule(nn.Module):
             exit_scale_factors=[1] * 4,
             exit_kernel_sizes=[3] * 4,
             exit_strides=[None] * 4,
-            exit_padding=[None] * 4
+            exit_padding=[None] * 4,
+            threshold=0.9
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -178,6 +180,7 @@ class MultiExitModule(nn.Module):
         self.exit_strides = exit_strides
         self.exit_padding = exit_padding
         self.exits = []
+        self.threshold = threshold
 
     def build_and_add_exit(self, in_dims):
         exit_ix = len(self.exits)
@@ -216,8 +219,29 @@ class MultiExitModule(nn.Module):
                 exit_out = self.exits[exit_ix](exit_in, y=y)
                 for k in exit_out:
                     multi_exit_out[f"E={exit_ix}, {k}"] = exit_out[k]
-                multi_exit_out['logits'] = exit_out['logits']
                 exit_ix += 1
+        self.assign_early_exit_logits(multi_exit_out)
+        return multi_exit_out
+
+    def assign_early_exit_logits(self, multi_exit_out):
+        exit_ix = 0
+        exited = None
+        for block_num in self.exit_block_nums:
+            if block_num <= self.final_block_num:
+                logits = multi_exit_out[f'E={exit_ix}, logits']
+                if exited is None:
+                    multi_exit_out['logits'] = torch.zeros_like(logits)
+                    exited = torch.zeros(len(logits)).to(logits.device)
+                p_max = F.softmax(logits, dim=1).max(dim=1)[0]
+                exit_here = torch.where((p_max > self.threshold).long() * (1 - exited))[0]
+                # print(f'E={exit_ix}, exit_here={len(exit_here)/len(logits) * 100}')
+                multi_exit_out['logits'][exit_here] = logits[exit_here]
+                exited[exit_here] = 1
+                exit_ix += 1
+
+        # Use final exit if nothing else works
+        not_exited = torch.where(exited == 0)[0]
+        multi_exit_out['logits'][not_exited] = logits[not_exited]
         return multi_exit_out
 
     def set_final_exit_ix(self, final_exit_ix):
@@ -226,6 +250,8 @@ class MultiExitModule(nn.Module):
         """
         self.final_exit_ix = final_exit_ix
         self.final_block_num = self.exit_block_nums[final_exit_ix]
+
+    # def get_early_exit_logits(self, exit_outs):
 
 
 class MultiExitPoE(MultiExitModule):
