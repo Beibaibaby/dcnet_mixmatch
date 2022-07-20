@@ -134,7 +134,8 @@ def occam_resnet18_v2_generic(num_classes,
                               cam_width_factors=[1] * 4,
                               detached_exit_ixs=[0],
                               num_views=1,
-                              separate_views_upto=0):
+                              separate_views_upto=0,
+                              poe_temperature=None):
     return occam_resnet18_v2(num_classes, multi_exit_type=multi_exit_type,
                              exits_kwargs={
                                  'exit_initial_conv_type': exit_initial_conv_type,
@@ -143,17 +144,11 @@ def occam_resnet18_v2_generic(num_classes,
                                  'exit_width_factors': exit_width_factors,
                                  'cam_width_factors': cam_width_factors,
                                  'exit_padding': exit_padding,
-                                 'detached_exit_ixs': detached_exit_ixs
+                                 'detached_exit_ixs': detached_exit_ixs,
+                                 'poe_temperature': poe_temperature
                              },
                              num_views=num_views,
                              separate_views_upto=separate_views_upto)
-
-
-# def occam_resnet18_v2_k9753(num_classes):
-#     return occam_resnet18_v2_generic(num_classes,
-#                                      kernel_sizes=[9, 7, 5, 3],
-#                                      exit_strides=[4, 3, 2, 1],
-#                                      exit_padding=[5, 4, 3, 2])
 
 
 def occam_resnet18_v2_k9753(num_classes, multi_exit_type=MultiExitModule,
@@ -168,25 +163,16 @@ def occam_resnet18_v2_k9753(num_classes, multi_exit_type=MultiExitModule,
                                      **kwargs)
 
 
-# def occam_resnet18_v2_k9753_logit_norm(num_classes, temperature):
+# def occam_resnet18_v2_k9753_poe(num_classes, temperature):
 #     return occam_resnet18_v2_k9753(num_classes,
-#                                    multi_exit_type=MultiExitModule,
-#                                    use_logit_norm=True,
-#                                    temperature=temperature)
+#                                    multi_exit_type=MultiExitPoE,
+#                                    poe_temperature=temperature)
 
 
-def occam_resnet18_v2_k9753_poe(num_classes):
-    return occam_resnet18_v2_k9753(num_classes, multi_exit_type=MultiExitPoE)
-
-
-# def occam_resnet18_v2_k9753_poe_logit_norm(num_classes, temperature):
-#     return occam_resnet18_v2_k9753(num_classes, multi_exit_type=MultiExitPoE,
-#                                    use_logit_norm=True,
-#                                    temperature=temperature)
-
-
-def occam_resnet18_v2_k9753_poe_detach(num_classes):
-    return occam_resnet18_v2_k9753(num_classes, multi_exit_type=MultiExitPoEDetachPrev)
+def occam_resnet18_v2_k9753_poe_detach(num_classes, temperature):
+    return occam_resnet18_v2_k9753(num_classes,
+                                   multi_exit_type=MultiExitPoEDetachPrev,
+                                   poe_temperature=temperature)
 
 
 def occam_resnet18_v2_in_6(num_classes):

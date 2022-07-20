@@ -1,16 +1,11 @@
 import logging
 from models.variable_width_resnet import *
 from models.occam_resnet import *
-# from models.occam_densenet import *
-# from torchvision.models.efficientnet import *
-# from models.occam_efficient_net import *
-# from torchvision.models.mobilenet import *
-# from models.occam_mobile_net import *
 from models.occam_resnet_v2 import *
 
 
 def build_model(model_config):
-    if 'logit_norm' in model_config.name:
+    if 'occam' in model_config.name and 'poe' in model_config.name:
         m = eval(model_config.name)(model_config.num_classes, model_config.temperature)
     elif 'occam' in model_config.name:  # or 'resnet' in model_config.name:
         m = eval(model_config.name)(model_config.num_classes)

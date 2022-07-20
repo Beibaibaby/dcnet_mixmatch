@@ -141,7 +141,7 @@ class MultiExitModule(nn.Module):
 
     def __init__(
             self,
-            detached_exit_ixs=[0],
+            detached_exit_ixs=[],
             exit_out_dims=None,
             exit_block_nums=[0, 1, 2, 3],
             exit_type=ExitModule,
@@ -153,7 +153,8 @@ class MultiExitModule(nn.Module):
             exit_kernel_sizes=[3] * 4,
             exit_strides=[None] * 4,
             exit_padding=[None] * 4,
-            threshold=0.9
+            threshold=0.9,
+            **kwargs
     ) -> None:
         """
         Adds multiple exits to DenseNet
@@ -258,29 +259,34 @@ class MultiExitPoE(MultiExitModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.detach_prev = False
+        self.temperature = kwargs['poe_temperature']
 
     def forward(self, block_num_to_exit_in, y=None):
-        exit_outs = super().forward(block_num_to_exit_in)
-        combo_cams, combo_logits = None, None
+        multi_exit_out = super().forward(block_num_to_exit_in)
+        combo_cams, combo_logits, logits_sum = None, None, None
         for exit_ix in range(len(self.exit_block_nums)):
-            if f"E={exit_ix}, cam" in exit_outs:
-                combo_cams, combo_logits = self.get_combined_cams_and_logits(exit_outs[f"E={exit_ix}, cam"],
-                                                                             combo_cams, combo_logits)
-                exit_outs[f"E={exit_ix}, cam"] = combo_cams
-                exit_outs[f"E={exit_ix}, logits"] = combo_logits
-                exit_outs["logits"] = combo_logits
-        return exit_outs
+            if f"E={exit_ix}, cam" in multi_exit_out:
+                combo_cams, combo_logits, logits_sum = self.get_combined_cams_and_logits(
+                    multi_exit_out[f"E={exit_ix}, cam"],
+                    combo_cams, logits_sum)
+                multi_exit_out[f"E={exit_ix}, cam"] = combo_cams
+                multi_exit_out[f"E={exit_ix}, logits"] = combo_logits
+        self.assign_early_exit_logits(multi_exit_out)
+        return multi_exit_out
 
     def get_combined_cams_and_logits(self, cams, combo_cams_in, combo_logits_in):
         if combo_cams_in is None:
             combo_cams, combo_logits = cams, F.adaptive_avg_pool2d(cams, 1).squeeze()
+            logits_sum = combo_logits
         else:
             combo_cams_in = interpolate(combo_cams_in.detach() if self.detach_prev else combo_cams_in,
                                         cams.shape[2], cams.shape[3])
             combo_cams = combo_cams_in + cams
             logits = F.adaptive_avg_pool2d(cams, 1).squeeze()
-            combo_logits = combo_logits_in.detach() if self.detach_prev else combo_logits_in + logits
-        return combo_cams, combo_logits
+            logits_sum = (combo_logits_in.detach() if self.detach_prev else combo_logits_in) + logits
+            combo_logits = (combo_logits_in.detach() if self.detach_prev else combo_logits_in) / self.temperature + \
+                           logits
+        return combo_cams, combo_logits, logits_sum
 
 
 class MultiExitPoEDetachPrev(MultiExitPoE):
