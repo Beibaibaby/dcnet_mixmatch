@@ -155,6 +155,7 @@ class MultiExitModule(nn.Module):
             exit_strides=[None] * 4,
             exit_padding=[None] * 4,
             threshold=0.9,
+            bias_amp_gamma=0,
             **kwargs
     ) -> None:
         """
@@ -183,6 +184,7 @@ class MultiExitModule(nn.Module):
         self.exit_padding = exit_padding
         self.exits = []
         self.threshold = threshold
+        self.bias_amp_gamma = bias_amp_gamma
 
     def build_and_add_exit(self, in_dims):
         exit_ix = len(self.exits)
@@ -211,6 +213,7 @@ class MultiExitModule(nn.Module):
         return self.exit_block_nums
 
     def forward(self, block_num_to_exit_in, y=None):
+        # assert self.bias_amp_gamma == 0, 'Bias amplification not supported'
         multi_exit_out = {}
         exit_ix = 0
         for block_num in block_num_to_exit_in:
@@ -236,7 +239,6 @@ class MultiExitModule(nn.Module):
                     exited = torch.zeros(len(logits)).to(logits.device)
                 p_max = F.softmax(logits, dim=1).max(dim=1)[0]
                 exit_here = torch.where((p_max > self.threshold).long() * (1 - exited))[0]
-                # print(f'E={exit_ix}, exit_here={len(exit_here)/len(logits) * 100}')
                 multi_exit_out['logits'][exit_here] = logits[exit_here]
                 exited[exit_here] = 1
                 exit_ix += 1
@@ -253,8 +255,6 @@ class MultiExitModule(nn.Module):
         self.final_exit_ix = final_exit_ix
         self.final_block_num = self.exit_block_nums[final_exit_ix]
 
-    # def get_early_exit_logits(self, exit_outs):
-
 
 class MultiExitPoE(MultiExitModule):
     def __init__(self, **kwargs):
@@ -269,15 +269,22 @@ class MultiExitPoE(MultiExitModule):
             if f"E={exit_ix}, cam" in multi_exit_out:
                 combo_cams, combo_logits, logits_sum = self.get_combined_cams_and_logits(
                     multi_exit_out[f"E={exit_ix}, cam"],
-                    combo_cams, logits_sum)
+                    combo_cams, logits_sum, y)
                 multi_exit_out[f"E={exit_ix}, cam"] = combo_cams
                 multi_exit_out[f"E={exit_ix}, logits"] = combo_logits
         self.assign_early_exit_logits(multi_exit_out)
         return multi_exit_out
 
-    def get_combined_cams_and_logits(self, cams, combo_cams_in, combo_logits_in):
+    def get_combined_cams_and_logits(self, cams, combo_cams_in, combo_logits_in, y=None):
         if combo_cams_in is None:
+            # Handle E0
             combo_cams, combo_logits = cams, F.adaptive_avg_pool2d(cams, 1).squeeze()
+            # Bias amplification
+            if self.bias_amp_gamma > 0:
+                if y is None:
+                    y = torch.argmax(combo_logits, dim=1).squeeze()
+                gt_p = F.softmax(combo_logits, dim=1).gather(1, y).view(-1) ** self.bias_amp_gamma
+                combo_logits = gt_p.unsqueeze(1).repeat(1, combo_logits.shape[1]) * combo_logits
             logits_sum = combo_logits
         else:
             combo_cams_in = interpolate(combo_cams_in.detach() if self.detach_prev else combo_cams_in,

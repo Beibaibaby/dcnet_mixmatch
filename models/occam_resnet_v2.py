@@ -135,7 +135,8 @@ def occam_resnet18_v2_generic(num_classes,
                               detached_exit_ixs=[0],
                               num_views=1,
                               separate_views_upto=0,
-                              poe_temperature=None):
+                              poe_temperature=None,
+                              bias_amp_gamma=0):
     return occam_resnet18_v2(num_classes, multi_exit_type=multi_exit_type,
                              exits_kwargs={
                                  'exit_initial_conv_type': exit_initial_conv_type,
@@ -145,7 +146,8 @@ def occam_resnet18_v2_generic(num_classes,
                                  'cam_width_factors': cam_width_factors,
                                  'exit_padding': exit_padding,
                                  'detached_exit_ixs': detached_exit_ixs,
-                                 'poe_temperature': poe_temperature
+                                 'poe_temperature': poe_temperature,
+                                 'bias_amp_gamma': bias_amp_gamma
                              },
                              num_views=num_views,
                              separate_views_upto=separate_views_upto)
@@ -163,16 +165,26 @@ def occam_resnet18_v2_k9753(num_classes, multi_exit_type=MultiExitModule,
                                      **kwargs)
 
 
-# def occam_resnet18_v2_k9753_poe(num_classes, temperature):
-#     return occam_resnet18_v2_k9753(num_classes,
-#                                    multi_exit_type=MultiExitPoE,
-#                                    poe_temperature=temperature)
-
-
 def occam_resnet18_v2_k9753_poe_detach(num_classes, temperature):
     return occam_resnet18_v2_k9753(num_classes,
                                    multi_exit_type=MultiExitPoEDetachPrev,
                                    poe_temperature=temperature)
+
+
+def occam_resnet18_v2_k9753_bias_amp_detach_poe_detach(num_classes, temperature):
+    return occam_resnet18_v2_k9753(num_classes,
+                                   multi_exit_type=MultiExitPoEDetachPrev,
+                                   poe_temperature=temperature,
+                                   detached_exit_ixs=[0],
+                                   bias_amp_gamma=temperature
+                                   )
+
+
+def occam_resnet18_v2_k9753_bias_amp_poe_detach(num_classes, temperature):
+    return occam_resnet18_v2_k9753(num_classes,
+                                   multi_exit_type=MultiExitPoEDetachPrev,
+                                   poe_temperature=temperature,
+                                   bias_amp_gamma=temperature)
 
 
 def occam_resnet18_v2_in_6(num_classes):

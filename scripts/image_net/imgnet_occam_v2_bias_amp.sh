@@ -1,16 +1,16 @@
 #!/bin/bash
 source activate occamnets
 
-GPU=0
+GPU=1
 
 dataset=image_net
 optim=image_net
 subset_percent=16
 precision=16
 
-for temperature in 2; do
+for temperature in 5; do
   for calibration_loss_wt in 0; do
-    for model in occam_resnet18_v2_k9753_poe_detach; do
+    for model in occam_resnet18_v2_k9753_bias_amp_poe_detach occam_resnet18_v2_k9753_bias_amp_detach_poe_detach; do
       for main_loss in CELoss; do
         for calibration_loss in MDCALoss; do
           CUDA_VISIBLE_DEVICES=${GPU} python main.py \
@@ -30,3 +30,9 @@ for temperature in 2; do
     done
   done
 done
+
+#  \
+#          trainer.limit_train_batches=2 \
+#          trainer.limit_val_batches=2 \
+#          trainer.limit_test_batches=2 \
+#          trainer.check_val_every_n_epoch=1
