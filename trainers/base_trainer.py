@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from models import model_factory
 from utils import optimizer_factory
-from utils.metrics import Accuracy
+from utils.metrics import Accuracy, LogitsAndGtY
 import json
 from utils import lr_schedulers
 from analysis.analyze_segmentation import SegmentationMetrics
@@ -53,15 +53,24 @@ class BaseTrainer(pl.LightningModule):
             loader_key = self.get_loader_key(split, dataloader_idx)
 
         acc_key = f'{prefix}{split}_{loader_key}_accuracy'
+        logits_n_y_key = f'{prefix}{split}_{loader_key}_logits_n_y'
+
         if batch_idx == 0:
             accuracy = Accuracy()
             setattr(self, acc_key, accuracy)
             self.init_calibration_analysis(split, loader_key, prefix=prefix)
+            setattr(self, logits_n_y_key, LogitsAndGtY())
+            if not hasattr(self, 'logits_n_y_keys'):
+                self.logits_n_y_keys = {}
+            self.logits_n_y_keys[logits_n_y_key] = logits_n_y_key
 
         accuracy = getattr(self, acc_key)
         self.accuracy_metric_step(batch, batch_idx, model_out, split, dataloader_idx, accuracy)
         self.segmentation_metric_step(batch, batch_idx, model_out, split, dataloader_idx, prefix=prefix)
         self.calibration_analysis_step(batch, batch_idx, split, dataloader_idx, model_out, prefix=prefix)
+        logits_n_y = getattr(self, logits_n_y_key)
+
+        self.logits_n_y_step(batch, batch_idx, model_out, split, dataloader_idx, logits_n_y)
 
     def validation_epoch_end(self, outputs):
         return self.shared_validation_epoch_end(outputs, 'val')
@@ -72,7 +81,6 @@ class BaseTrainer(pl.LightningModule):
     def shared_validation_epoch_end(self, outputs, split, prefix=''):
         loader_keys = self.get_dataloader_keys(split)
         for loader_key in loader_keys:
-
             accuracy = getattr(self, f'{prefix}{split}_{loader_key}_accuracy')
             self.log(f"{prefix}{split} {loader_key}_accuracy", accuracy.summary())
             detailed = accuracy.detailed()
@@ -123,6 +131,9 @@ class BaseTrainer(pl.LightningModule):
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out, batch['y'], batch['class_name'], batch['group_name'])
 
+    def logits_n_y_step(self, batch, batch_idx, model_out, split, dataloader_idx, logits_n_y):
+        logits_n_y.update(model_out, batch['y'])
+
     def segmentation_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx=None, prefix=''):
         if 'mask' not in batch:
             return
@@ -144,15 +155,15 @@ class BaseTrainer(pl.LightningModule):
     def get_classes(self, batch, logits, class_type):
         return batch['y'] if class_type == 'gt' else logits.argmax(dim=-1)
 
-    def segmentation_metric_epoch_end(self, split, loader_key):
+    def segmentation_metric_epoch_end(self, split, loader_key, prefix=''):
         # Log segmentation metrics
         for cls_type in ['gt', 'pred']:
             # metric_key = f'{cls_type}_{split}_{dataloader_key}_segmentation_metrics'
-            metric_key = f'{cls_type}_{split}_{loader_key}_segmentation_metrics'
+            metric_key = f'{prefix}{cls_type}_{split}_{loader_key}_segmentation_metrics'
             if hasattr(self, metric_key):
                 seg_metric_vals = getattr(self, metric_key).summary()
                 for sk in seg_metric_vals:
-                    self.log(f"{metric_key} {sk}", seg_metric_vals[sk])
+                    self.log(f"{prefix}{metric_key} {sk}", seg_metric_vals[sk])
 
     def init_calibration_analysis(self, split, loader_key, prefix=''):
         setattr(self, f'{prefix}{split}_{loader_key}_calibration_analysis', CalibrationAnalysis())

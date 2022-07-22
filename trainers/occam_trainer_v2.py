@@ -148,6 +148,9 @@ class OccamTrainerV2(BaseTrainer):
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out['logits'], batch['y'], batch['class_name'], batch['group_name'])
 
+    def logits_n_y_step(self, batch, batch_idx, model_out, split, dataloader_idx, logits_n_y):
+        logits_n_y.update(model_out['logits'], batch['y'])
+
     def init_calibration_analysis(self, split, loader_key, prefix=''):
         setattr(self, f'{prefix}{split}_{loader_key}_calibration_analysis', CalibrationAnalysis(self.num_exits))
 
@@ -289,7 +292,6 @@ class CalibrationAnalysis():
             ece = ECE(bins).measure(curr_conf, gt_ys)
             diagram.plot(curr_conf, gt_ys, filename=os.path.join(save_dir, f'{exit_ix}.png'),
                          title_suffix=f' ECE={ece}')
-
 
 # class ShapePriorLoss():
 #     def __init__(self, num_exits):

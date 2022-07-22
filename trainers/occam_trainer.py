@@ -169,6 +169,9 @@ class OccamTrainer(BaseTrainer):
     def accuracy_metric_step(self, batch, batch_idx, model_out, split, dataloader_idx, accuracy):
         accuracy.update(model_out['E=early, logits'], batch['y'], batch['class_name'], batch['group_name'])
 
+    def logits_n_y_step(self, batch, batch_idx, model_out, split, dataloader_idx, logits_n_y):
+        logits_n_y.update(model_out['E=early, logits'], batch['y'])
+
     def init_calibration_analysis(self, split, loader_key):
         setattr(self, f'{split}_{loader_key}_calibration_analysis', CalibrationAnalysis(self.num_exits))
 

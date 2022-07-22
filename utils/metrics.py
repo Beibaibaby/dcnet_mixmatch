@@ -121,3 +121,19 @@ class ExitPercent():
         return {
             'Exit%': self.get_exit_pct()
         }
+
+
+class LogitsAndGtY():
+    def __init__(self):
+        self.logits = None
+        self.y = None
+
+    def update(self, logits, y):
+        logits = logits.detach().cpu()
+        y = y.squeeze().detach().cpu()
+        if self.logits is None:
+            self.logits = logits
+            self.y = y
+        else:
+            self.logits = torch.cat((self.logits, logits), dim=0)
+            self.y = torch.cat((self.y, y))

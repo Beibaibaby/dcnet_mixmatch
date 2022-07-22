@@ -11,6 +11,9 @@ from trainers import trainer_factory
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 import yaml
+from analysis.analyze_by_imgnet_superclasses import compute_super_class_acc
+import json
+from utils import data_utils
 
 log = logging.getLogger(__name__)
 
@@ -50,12 +53,14 @@ def exec(cfg: DictConfig) -> None:
         pl_trainer = pl.Trainer(gpus=cfg.gpus,
                                 limit_train_batches=cfg.trainer.limit_train_batches,
                                 limit_val_batches=cfg.trainer.limit_val_batches,
-                                limit_test_batches=cfg.trainer.limit_test_batches)
-        pl_trainer.test(trainer, [loader])
-    elif cfg.task.name == 'analyze_segmentation':
-        from analysis.analyze_segmentation import main_calc_segmentation_metrics
-        main_calc_segmentation_metrics(config=cfg,
-                                       data_loader=dataloader_factory.build_dataloader_for_split(cfg, cfg.data_split))
+                                limit_test_batches=cfg.trainer.limit_test_batches, )
+        test(cfg, pl_trainer, trainer, loader)
+
+    # elif cfg.task.name == 'analyze_segmentation':
+    #     from analysis.analyze_segmentation import main_calc_segmentation_metrics
+    #     main_calc_segmentation_metrics(config=cfg,
+    #                                    data_loader=dataloader_factory.build_dataloader_for_split(cfg, cfg.data_split))
+
     else:
         data_loaders = dataloader_factory.build_dataloaders(cfg)
         trainer = trainer_factory.build_trainer(cfg)
@@ -87,7 +92,7 @@ def exec(cfg: DictConfig) -> None:
                 pl_trainer.fit(trainer,
                                train_dataloaders=data_loaders['train'],
                                val_dataloaders=list(data_loaders['val'].values()))
-                pl_trainer.test(trainer, list(data_loaders['test'].values()))
+                test(cfg, pl_trainer, trainer, list(data_loaders['test'].values()))
 
         else:
             # Single stage training
@@ -108,7 +113,21 @@ def exec(cfg: DictConfig) -> None:
             pl_trainer.fit(trainer,
                            train_dataloaders=data_loaders['train'],
                            val_dataloaders=list(data_loaders['val'].values()), )
-            pl_trainer.test(trainer, list(data_loaders['test'].values()))
+            test(cfg, pl_trainer, trainer, list(data_loaders['test'].values()))
+
+
+def test(cfg, pl_trainer, trainer, loader):
+    pl_trainer.test(trainer, [loader])
+
+    if 'image_net' in cfg.dataset.name:
+        for key in trainer.logits_n_y_keys:
+            save_dir = os.path.join(cfg.checkpoint_path.split('lightning_logs')[0], 'super_class_acc')
+            os.makedirs(save_dir, exist_ok=True)
+            super_cls_to_acc = compute_super_class_acc(getattr(trainer, key).logits,
+                                                       getattr(trainer, key).y,
+                                                       save_file=os.path.join(save_dir, f'{key}'))
+            logging.getLogger().info(f"{key.replace('logits_n_y', '')}")
+            logging.getLogger().info(json.dumps(super_cls_to_acc))
 
 
 ROOT = '/hdd/robik'
