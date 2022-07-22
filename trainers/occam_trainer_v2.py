@@ -28,12 +28,11 @@ class OccamTrainerV2(BaseTrainer):
     def training_step(self, batch, batch_idx):
         model_out = self(batch['x'], batch, batch_idx)
         loss = 0
+
+        # Main CE Loss
         if self.trainer_cfg.main_loss == 'CAMCELoss':
             main_loss_fn = CAMCELoss(self.num_exits, thresh_coeff=self.trainer_cfg.thresh_coeff,
                                      fg_wt=self.trainer_cfg.fg_wt, bg_wt=self.trainer_cfg.bg_wt)
-        elif self.trainer_cfg.main_loss == 'OccamFocalLoss':
-            main_loss_fn = OccamFocalLoss(self.num_exits,
-                                          gamma=self.trainer_cfg.gamma)
         else:
             main_loss_fn = eval(self.trainer_cfg.main_loss)(self.num_exits)
         main_loss_dict = main_loss_fn(model_out, batch['y'])
@@ -41,6 +40,7 @@ class OccamTrainerV2(BaseTrainer):
             loss += main_loss_dict[ml]
         self.log_dict(main_loss_dict, py_logging=False)
 
+        # Calibration Loss
         if self.trainer_cfg.calibration_loss is not None:
             cal_loss_dict = eval(self.trainer_cfg.calibration_loss)(self.num_exits)(model_out, batch['y'])
             for cl in cal_loss_dict:
@@ -48,16 +48,6 @@ class OccamTrainerV2(BaseTrainer):
                 loss += cal_loss_dict[cl]
             self.log_dict(cal_loss_dict, py_logging=False)
 
-        if self.trainer_cfg.shape_prior_loss_wt > 0:
-            sp_loss_dict = ShapePriorLoss(self.num_exits)(model_out, batch['y'])
-            for k in sp_loss_dict:
-                loss += self.trainer_cfg.shape_prior_loss_wt * sp_loss_dict[k]
-            self.log_dict(sp_loss_dict, py_logging=False)
-
-        # Log CAM norm
-        for exit_ix in range(self.num_exits):
-            self.log(f'E={exit_ix}, logits_norm', calc_logits_norm(model_out[f'E={exit_ix}, logits']).mean(),
-                     py_logging=False)
         return loss
 
     def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None):
@@ -179,59 +169,29 @@ class CELoss():
         return loss_dict
 
 
-# class MultiExitFocalLoss():
+#
+# class OccamFocalLoss():
 #     """
 #     Uses p_gt from previous exits to weigh the loss
 #     """
 #
-#     def __init__(self, num_exits, gamma, detach):
+#     def __init__(self, num_exits, gamma, detach_p_gt=True):
 #         self.num_exits = num_exits
 #         self.gamma = gamma
-#         self.detach = detach
+#         self.detach = detach_p_gt
 #
 #     def __call__(self, exit_outs, gt_ys):
 #         gt_ys = gt_ys.view(-1, 1)
-#         loss_dict = {}
-#         running_logits = None
+#         loss_dict, prev_p_gt = {}, 0
 #
 #         for exit_ix in range(self.num_exits):
 #             logits = exit_outs[f'E={exit_ix}, logits']
 #             logpt = F.log_softmax(logits, dim=1).gather(1, gt_ys).view(-1)
-#
-#             if exit_ix == 0:
-#                 loss = - logpt
-#                 running_logits = logits
-#             else:
-#                 prev_logpt = F.log_softmax(running_logits, dim=1).gather(1, gt_ys).view(-1)
-#                 prev_p_gt = prev_logpt.exp().detach() if self.detach else prev_logpt.exp()
-#                 loss = -1 * (1 - prev_p_gt) ** self.gamma * logpt
-#                 running_logits += logits
+#             wt = logpt.exp() if exit_ix == 0 else (1 - prev_p_gt) / (1 - prev_p_gt).max()
+#             loss = - wt ** self.gamma * logpt
+#             prev_p_gt *= logpt.exp().detach() if self.detach else logpt.exp()
 #             loss_dict[f'E={exit_ix}, main'] = loss.mean()
 #         return loss_dict
-
-
-class OccamFocalLoss():
-    """
-    Uses p_gt from previous exits to weigh the loss
-    """
-
-    def __init__(self, num_exits, gamma, detach_p_gt=True):
-        self.num_exits = num_exits
-        self.gamma = gamma
-        self.detach = detach_p_gt
-
-    def __call__(self, exit_outs, gt_ys):
-        gt_ys = gt_ys.view(-1, 1)
-        loss_dict, prev_p_gt = {}, 0
-
-        for exit_ix in range(self.num_exits):
-            logits = exit_outs[f'E={exit_ix}, logits']
-            logpt = F.log_softmax(logits, dim=1).gather(1, gt_ys).view(-1)
-            wt = logpt.exp() if exit_ix == 0 else (1 - prev_p_gt) / (1 - prev_p_gt).max()
-            loss = - wt ** self.gamma * logpt
-            prev_p_gt *= logpt.exp().detach() if self.detach else logpt.exp()
-            loss_dict[f'E={exit_ix}, main'] = loss.mean()
-        return loss_dict
 
 
 class CAMCELoss():
@@ -331,18 +291,18 @@ class CalibrationAnalysis():
                          title_suffix=f' ECE={ece}')
 
 
-class ShapePriorLoss():
-    def __init__(self, num_exits):
-        self.num_exits = num_exits
-
-    def __call__(self, model_out, y):
-        loss_dict = {}
-        for exit_ix in range(self.num_exits):
-            cam = model_out[f'E={exit_ix}, cam']
-            gt_cams = get_class_cams_for_occam_nets(cam, y).squeeze()
-            gt_cams = gt_cams / gt_cams.max()
-            exit_in_norm = torch.norm(model_out[f'E={exit_ix}, exit_in'], dim=1).squeeze()
-            exit_in_norm = interpolate(exit_in_norm, gt_cams.shape[1], gt_cams.shape[2]).squeeze()
-            loss = F.mse_loss(exit_in_norm, gt_cams.detach()).squeeze()
-            loss_dict[f'E={exit_ix}, shape_prior'] = loss
-        return loss_dict
+# class ShapePriorLoss():
+#     def __init__(self, num_exits):
+#         self.num_exits = num_exits
+#
+#     def __call__(self, model_out, y):
+#         loss_dict = {}
+#         for exit_ix in range(self.num_exits):
+#             cam = model_out[f'E={exit_ix}, cam']
+#             gt_cams = get_class_cams_for_occam_nets(cam, y).squeeze()
+#             gt_cams = gt_cams / gt_cams.max()
+#             exit_in_norm = torch.norm(model_out[f'E={exit_ix}, exit_in'], dim=1).squeeze()
+#             exit_in_norm = interpolate(exit_in_norm, gt_cams.shape[1], gt_cams.shape[2]).squeeze()
+#             loss = F.mse_loss(exit_in_norm, gt_cams.detach()).squeeze()
+#             loss_dict[f'E={exit_ix}, shape_prior'] = loss
+#         return loss_dict
