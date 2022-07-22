@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from utils.metrics import Accuracy
 from utils.cam_utils import *
+from torchvision.transforms import GaussianBlur
 
 
 def build_non_linearity(non_linearity_type, num_features):
@@ -335,3 +336,55 @@ class MultiExitStats:
                 for k2 in self.exit_ix_to_stats[exit_ix][k].summary():
                     exit_to_summary[f"{prefix}E={exit_ix} {k2}"] = self.exit_ix_to_stats[exit_ix][k].summary()[k2]
         return exit_to_summary
+
+
+class MultiView():
+    def __init__(self, input_views=['edge', 'rgb']):
+        self.sobel = Sobel()
+        self.input_views = input_views
+
+    def create_views(self, x):
+        x_list = []
+        for v in self.input_views:
+            if v == 'rgb':
+                out_x = x
+            elif v == 'edge':
+                sigma = self.blur_sigma
+                out_x = x
+                out_x = GaussianBlur(kernel_size=3, sigma=(sigma, sigma))(out_x)
+                out_x = self.sobel(out_x.mean(dim=1, keepdims=True)).repeat(1, 3, 1, 1)
+            elif v == 'grayscale':
+                out_x = x.mean(dim=1).unsqueeze(1).repeat(1, 3, 1, 1)
+            x_list.append(out_x)
+
+        return torch.cat(x_list, dim=1)
+
+
+class Sobel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.filter = nn.Conv2d(in_channels=1, out_channels=2, kernel_size=3, stride=1, padding=1, bias=False,
+                                padding_mode='replicate')
+
+        Gx = torch.tensor([[1.0, 0.0, -1.0],
+                           [2.0, 0.0, -2.0],
+                           [1.0, 0.0, -1.0]])
+        Gy = torch.tensor([[1.0, 2.0, 1.0],
+                           [0.0, 0.0, 0.0],
+                           [-1.0, -2.0, -1.0]])
+        G = torch.cat([Gx.unsqueeze(0), Gy.unsqueeze(0)], 0)
+        G = G.unsqueeze(1)
+        self.filter.weight = nn.Parameter(G, requires_grad=False)
+
+    def forward(self, img):
+        x = self.filter(img)
+        x = torch.mul(x, x)
+        x = torch.sum(x, dim=1, keepdim=True)
+        x = torch.sqrt(x)
+        return x
+
+
+def save_img(img, save_file):
+    img = cv2.normalize(img, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+    cv2.imwrite(save_file, (img * 255).astype(np.uint8))
+    # logging.getLogger().info(save_file)
