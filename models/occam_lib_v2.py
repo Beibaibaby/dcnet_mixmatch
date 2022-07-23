@@ -284,7 +284,7 @@ class MultiExitPoE(MultiExitModule):
                 if y is None:
                     y = torch.argmax(combo_logits, dim=1).squeeze()
                 gt_p = F.softmax(combo_logits, dim=1).gather(1, y).view(-1) ** self.bias_amp_gamma
-                combo_logits = gt_p.unsqueeze(1).repeat(1, combo_logits.shape[1]) * combo_logits
+                combo_logits = gt_p.unsqueeze(1).repeat(1, combo_logits.shape[1]).detach() * combo_logits
             logits_sum = combo_logits
         else:
             combo_cams_in = interpolate(combo_cams_in.detach() if self.detach_prev else combo_cams_in,
@@ -356,7 +356,8 @@ class MultiView():
             if v == 'rgb':
                 out_x = x
             elif v == 'edge':
-                sigma = self.blur_sigma
+                sigma = self.blur
+                _sigma
                 out_x = x
                 out_x = GaussianBlur(kernel_size=3, sigma=(sigma, sigma))(out_x)
                 out_x = self.sobel(out_x.mean(dim=1, keepdims=True)).repeat(1, 3, 1, 1)

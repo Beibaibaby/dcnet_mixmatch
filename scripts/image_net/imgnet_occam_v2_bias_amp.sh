@@ -1,14 +1,14 @@
 #!/bin/bash
 source activate occamnets
 
-GPU=1
+GPU=0
 
 dataset=image_net
 optim=image_net
 subset_percent=16
 precision=16
 
-for temperature in 5; do
+for temperature in 5 2; do
   for calibration_loss_wt in 0; do
     for model in occam_resnet18_v2_k9753_bias_amp_poe_detach occam_resnet18_v2_k9753_bias_amp_detach_poe_detach; do
       for main_loss in CELoss; do
@@ -24,7 +24,7 @@ for temperature in 5; do
           dataset=${dataset} \
           dataset.subset_percent=${subset_percent} \
           optimizer=${optim} \
-          expt_suffix=temp_${temperature}_${main_loss}_${calibration_loss}_${calibration_loss_wt}_subset_${subset_percent}_prec_${precision}
+          expt_suffix=temp_${temperature}_subset_${subset_percent}_prec_${precision}
         done
       done
     done
