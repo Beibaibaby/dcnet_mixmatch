@@ -2,10 +2,12 @@ import logging
 
 import torch
 import torch.nn as nn
+
+from utils import data_utils
 from utils.metrics import Accuracy
 from utils.cam_utils import *
-from torchvision.transforms import GaussianBlur
-
+from torchvision.transforms import GaussianBlur, ColorJitter
+import torchvision.transforms.functional as T
 
 def build_non_linearity(non_linearity_type, num_features):
     return non_linearity_type()
@@ -346,24 +348,23 @@ class MultiExitStats:
 
 
 class MultiView():
-    def __init__(self, input_views=['edge', 'rgb']):
+    def __init__(self, input_views=['edge', 'rgb'], blur_sigma=None, contrast=None):
         self.sobel = Sobel()
         self.input_views = input_views
+        self.blur_sigma = blur_sigma
+        self.contrast = contrast
 
-    def create_views(self, x):
+    def create_views(self, x, save_fname=None):
         x_list = []
         for v in self.input_views:
-            if v == 'rgb':
-                out_x = x
-            elif v == 'edge':
-                sigma = self.blur
-                _sigma
-                out_x = x
-                out_x = GaussianBlur(kernel_size=3, sigma=(sigma, sigma))(out_x)
-                out_x = self.sobel(out_x.mean(dim=1, keepdims=True)).repeat(1, 3, 1, 1)
-            elif v == 'grayscale':
-                out_x = x.mean(dim=1).unsqueeze(1).repeat(1, 3, 1, 1)
+            sub_views = v.split("+")
+            out_x = recursive_views(x, sub_views, blur_sigma=self.blur_sigma, contrast=self.contrast)
             x_list.append(out_x)
+            if save_fname is not None:
+                os.makedirs(data_utils.get_dir(save_fname), exist_ok=True)
+                img = out_x[0].detach().cpu().permute(1, 2, 0).numpy()
+                img = cv2.normalize(img, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+                cv2.imwrite(save_fname + f"_{v}.jpg", (img * 255).astype(np.uint8))
 
         return torch.cat(x_list, dim=1)
 
@@ -385,14 +386,30 @@ class Sobel(nn.Module):
         self.filter.weight = nn.Parameter(G, requires_grad=False)
 
     def forward(self, img):
-        x = self.filter(img)
+        x = self.filter.to(img.device)(img)
         x = torch.mul(x, x)
         x = torch.sum(x, dim=1, keepdim=True)
         x = torch.sqrt(x)
         return x
 
 
+def recursive_views(x, views, sobel=Sobel(), blur_sigma=2.0, contrast=1.0):
+    for v in views:
+        if v == 'rgb':
+            x = x
+        elif v == 'blur':
+            x = T.gaussian_blur(x, kernel_size=3, sigma=blur_sigma)
+        elif v == 'edge':
+            x = sobel(x.mean(dim=1, keepdims=True)).repeat(1, 3, 1, 1)
+        elif v == 'grayscale':
+            x = x.mean(dim=1).unsqueeze(1).repeat(1, 3, 1, 1)
+        elif v == 'contrast':
+            x = T.adjust_contrast(x, contrast)
+
+
+    return x
+
+
 def save_img(img, save_file):
     img = cv2.normalize(img, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
     cv2.imwrite(save_file, (img * 255).astype(np.uint8))
-    # logging.getLogger().info(save_file)

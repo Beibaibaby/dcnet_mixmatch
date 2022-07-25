@@ -1,5 +1,6 @@
 defaults:
   - occam_trainer_v2
 name: OccamTrainerV2MultiIn
-blur_sigma: 0.1
+blur_sigma: 2.0
+contrast: 0
 input_views: [ 'edge','rgb'] # 'grayscale',
