@@ -54,7 +54,7 @@ def exec(cfg: DictConfig) -> None:
                                 limit_train_batches=cfg.trainer.limit_train_batches,
                                 limit_val_batches=cfg.trainer.limit_val_batches,
                                 limit_test_batches=cfg.trainer.limit_test_batches, )
-        test(cfg, pl_trainer, trainer, loader)
+        test(cfg, pl_trainer, trainer, [loader])
 
     # elif cfg.task.name == 'analyze_segmentation':
     #     from analysis.analyze_segmentation import main_calc_segmentation_metrics
@@ -116,12 +116,15 @@ def exec(cfg: DictConfig) -> None:
             test(cfg, pl_trainer, trainer, list(data_loaders['test'].values()))
 
 
-def test(cfg, pl_trainer, trainer, loader):
-    pl_trainer.test(trainer, [loader])
+def test(cfg, pl_trainer, trainer, loaders):
+    pl_trainer.test(trainer, loaders)
 
     if 'image_net' in cfg.dataset.name:
         for key in trainer.logits_n_y_keys:
-            save_dir = os.path.join(cfg.checkpoint_path.split('lightning_logs')[0], 'super_class_acc')
+            if cfg.checkpoint_path is not None:
+                save_dir = os.path.join(cfg.checkpoint_path.split('lightning_logs')[0], 'super_class_acc')
+            else:
+                save_dir = os.path.join(os.getcwd(), 'super_class_acc')
             os.makedirs(save_dir, exist_ok=True)
             super_cls_to_acc = compute_super_class_acc(getattr(trainer, key).logits,
                                                        getattr(trainer, key).y,

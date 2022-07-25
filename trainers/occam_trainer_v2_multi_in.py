@@ -22,10 +22,7 @@ class OccamTrainerV2MultiIn(OccamTrainerV2):
         self.num_exits = len(self.model.multi_exit.exit_block_nums)
         self.sobel = Sobel()
 
-    def create_views(self, x):
-        if not hasattr(self, 'views_saved'):
-            self.views_saved = False
-
+    def create_views(self, x, batch_idx, loader_key):
         x_list = []
         for v in self.trainer_cfg.input_views:
             if v == 'rgb':
@@ -39,22 +36,18 @@ class OccamTrainerV2MultiIn(OccamTrainerV2):
                 out_x = x.mean(dim=1).unsqueeze(1).repeat(1, 3, 1, 1)
             x_list.append(out_x)
 
-            if not self.training and not self.views_saved:
-                self.save_views(out_x, os.path.join(os.getcwd(), f'viz_{v}'))
+            if not self.training:
+                self.save_views(out_x, os.path.join(os.getcwd(), f'viz_{v}_{loader_key}'), f'b{batch_idx}')
 
-        if not self.training:
-            self.views_saved = True
         return torch.cat(x_list, dim=1)
 
-    def forward(self, x, batch=None, batch_idx=None):
-        x = self.create_views(x)
+    def forward(self, x, batch=None, batch_idx=None, loader_key=None):
+        x = self.create_views(x, batch_idx, loader_key)
         return self.model(x, batch['y'])
 
-    def save_views(self, views, save_dir):
+    def save_views(self, views, save_dir, prefix):
         os.makedirs(save_dir, exist_ok=True)
-        for ix in range(len(views)):
-            save_img(views[ix].detach().cpu().permute(1, 2, 0).numpy(),
-                     os.path.join(save_dir, f'{ix}.jpg'))
+        save_img(views[0].detach().cpu().permute(1, 2, 0).numpy(), os.path.join(save_dir, f'{prefix}.jpg'))
 
 
 class Sobel(nn.Module):

@@ -26,7 +26,7 @@ class OccamTrainerV2(BaseTrainer):
         return self.model(x, batch['y'])
 
     def training_step(self, batch, batch_idx):
-        model_out = self(batch['x'], batch, batch_idx)
+        model_out = self(batch['x'], batch, batch_idx, loader_key='train')
         loss = 0
 
         # Main CE Loss
@@ -51,9 +51,10 @@ class OccamTrainerV2(BaseTrainer):
         return loss
 
     def shared_validation_step(self, batch, batch_idx, split, dataloader_idx=None, model_outputs=None):
-        if model_outputs is None:
-            model_outputs = self(batch['x'], batch, batch_idx)
         loader_key = self.get_loader_key(split, dataloader_idx)
+
+        if model_outputs is None:
+            model_outputs = self(batch['x'], batch, batch_idx, loader_key=loader_key)
         super().shared_validation_step(batch, batch_idx, split, dataloader_idx, model_outputs)
         if batch_idx == 0:
             me_stats = MultiExitStats()
@@ -108,12 +109,13 @@ class OccamTrainerV2(BaseTrainer):
                         hid_type_to_exit_to_hid_norms[hid_type][exit_name] = hid
 
             if cls_type == 'gt':
-                self.save_heat_maps_step(batch_idx, batch, exit_to_class_cams, heat_map_suffix=f"_{prefix}{cls_type}")
+                self.save_heat_maps_step(batch_idx, batch, exit_to_class_cams, loader_key,
+                                         heat_map_suffix=f"_{prefix}{cls_type}")
                 for hid_type in ['exit_in', 'cam_in']:
                     self.save_heat_maps_step(batch_idx, batch, hid_type_to_exit_to_hid_norms[hid_type],
-                                             heat_map_suffix=f"_{prefix}{hid_type}")
+                                             loader_key, heat_map_suffix=f"_{prefix}{hid_type}")
 
-    def save_heat_maps_step(self, batch_idx, batch, exit_to_heat_maps, heat_map_suffix=''):
+    def save_heat_maps_step(self, batch_idx, batch, exit_to_heat_maps, loader_key, heat_map_suffix=''):
         """
         Saves the original image, GT mask and the predicted CAMs for the first sample in the batch
         :param batch_idx:
@@ -124,7 +126,7 @@ class OccamTrainerV2(BaseTrainer):
         _exit_to_heat_maps = {}
         for en in exit_to_heat_maps:
             _exit_to_heat_maps[en] = exit_to_heat_maps[en][0]
-        save_dir = os.path.join(os.getcwd(), f'viz/visualizations_ep{self.current_epoch}_b{batch_idx}')
+        save_dir = os.path.join(os.getcwd(), f'heat_maps_{loader_key}/ep{self.current_epoch}_b{batch_idx}')
         gt_mask = None if 'mask' not in batch else batch['mask'][0]
         save_exitwise_heatmaps(batch['x'][0], gt_mask, _exit_to_heat_maps, save_dir, heat_map_suffix=heat_map_suffix)
 

@@ -9,7 +9,7 @@ subset_percent=16
 precision=16
 
 for model in occam_resnet18_v2_k9753; do
-  for blur_sigma in 2 1 0.5; do
+  for blur_sigma in 2; do  #1 0.5; do
     for main_loss in CELoss; do
       for calibration_loss in MDCALoss; do
         for calibration_loss_wt in 0; do
@@ -25,7 +25,13 @@ for model in occam_resnet18_v2_k9753; do
           dataset=${dataset} \
           dataset.subset_percent=${subset_percent} \
           optimizer=${optim} \
-          expt_suffix=edge_blur_sigma_${blur_sigma}_subset_${subset_percent}_prec_${precision}
+          expt_suffix=tmp_edge_blur_sigma_${blur_sigma}_subset_${subset_percent}_prec_${precision} \
+          trainer.limit_train_batches=1 \
+          trainer.limit_val_batches=1 \
+          trainer.limit_test_batches=2 \
+          trainer.check_val_every_n_epoch=1 \
+          optimizer.epochs=1
+
         done
       done
     done
