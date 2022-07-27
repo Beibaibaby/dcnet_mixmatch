@@ -9,6 +9,7 @@ from utils.cam_utils import *
 from torchvision.transforms import GaussianBlur, ColorJitter
 import torchvision.transforms.functional as T
 
+
 def build_non_linearity(non_linearity_type, num_features):
     return non_linearity_type()
 
@@ -36,6 +37,43 @@ class Conv2(nn.Module):
         x = self.non_linear1(x)
         x = self.conv2(x)
         return x
+
+
+class MultiScaleConv2(nn.Module):
+    def __init__(self, in_features, hid_features, out_features, num_scales, norm_type=nn.BatchNorm2d,
+                 non_linearity_type=nn.ReLU, conv_type=nn.Conv2d, kernel_size=3, stride=None, padding=None):
+        super(MultiScaleConv2, self).__init__()
+        if stride is None:
+            stride = 1
+        self.num_scales = num_scales
+        assert hid_features % num_scales == 0
+        assert out_features % num_scales == 0
+        self.width = hid_features // num_scales
+
+        self.conv1 = conv_type(in_channels=in_features, out_channels=hid_features, kernel_size=kernel_size,
+                               stride=stride, padding=padding, groups=1)
+        self.norm1 = norm_type(hid_features)
+        self.non_linear1 = build_non_linearity(non_linearity_type, hid_features)
+        conv2s = []
+        for scale_ix in range(num_scales - 1):
+            conv2s.append(nn.Conv2d(in_channels=self.width, out_channels=out_features // num_scales,
+                                    kernel_size=3, stride=1, padding=1, groups=1))
+        self.conv2s = nn.ModuleList(conv2s)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.norm1(x)
+        x = self.non_linear1(x)
+        grps = torch.split(x, self.width, 1)  # Split for each scale
+
+        for ix in range(self.num_scales):
+            if ix == 0:
+                grp = grps[ix]
+                out = grp
+            else:
+                grp = self.conv2s[ix - 1](grp + grps[ix])
+                out = torch.cat((out, grp), 1)
+        return out
 
 
 class DepthWiseConv2(nn.Module):
@@ -69,7 +107,6 @@ class ExitModule(nn.Module):
     """
 
     def __init__(self, in_dims, hid_dims, out_dims, cam_hid_dims=None,
-                 scale_factor=1,
                  groups=1,
                  kernel_size=3,
                  stride=None,
@@ -78,7 +115,8 @@ class ExitModule(nn.Module):
                  conv_type=nn.Conv2d,
                  norm_type=nn.BatchNorm2d,
                  non_linearity_type=nn.ReLU,
-                 padding=None
+                 padding=None,
+                 num_scales=None
                  ):
         super(ExitModule, self).__init__()
         self.in_dims = in_dims
@@ -90,13 +128,14 @@ class ExitModule(nn.Module):
         self.initial_conv_type = initial_conv_type
         self.conv_bias = conv_bias
         self.conv_type = conv_type
-        self.scale_factor = scale_factor
+        # self.scale_factor = scale_factor
         self.groups = groups
         self.kernel_size = kernel_size
         self.stride = stride
         self.padding = padding
         self.norm_type = norm_type
         self.non_linearity_type = non_linearity_type
+        self.num_scales = num_scales
         self.build_network()
 
     def build_network(self):
@@ -122,8 +161,83 @@ class ExitModule(nn.Module):
         """
         out = {}
         out['exit_in'] = x
-        if self.scale_factor != 1:
-            x = F.interpolate(x, scale_factor=self.scale_factor, align_corners=False, mode='bilinear')
+        # if self.scale_factor != 1:
+        #     x = F.interpolate(x, scale_factor=self.scale_factor, align_corners=False, mode='bilinear')
+
+        x = self.convs(x)
+        x = self.non_linearity(x)
+        cam_in = x
+
+        out['cam_in'] = cam_in
+        cam = self.cam(cam_in)  # Class activation maps before pooling
+        out['cam'] = cam
+        out['logits'] = F.adaptive_avg_pool2d(cam, (1)).squeeze()
+        return out
+
+
+class MultiScaleExitModule(nn.Module):
+
+    def __init__(self, in_dims, hid_dims, out_dims, cam_hid_dims=None,
+                 num_scales=4,
+                 groups=1,
+                 kernel_size=3,
+                 stride=None,
+                 initial_conv_type=None,
+                 conv_bias=False,
+                 conv_type=nn.Conv2d,
+                 norm_type=nn.BatchNorm2d,
+                 non_linearity_type=nn.ReLU,
+                 padding=None,
+                 num_scale=None
+                 ):
+        super(MultiScaleExitModule, self).__init__()
+        self.in_dims = in_dims
+        self.hid_dims = hid_dims
+        self.out_dims = out_dims
+        if cam_hid_dims is None:
+            cam_hid_dims = self.hid_dims
+        self.cam_hid_dims = cam_hid_dims
+        initial_conv_type = MultiScaleConv2
+        self.initial_conv_type = initial_conv_type
+        self.num_scales = num_scales
+        self.conv_bias = conv_bias
+        self.conv_type = conv_type
+        self.num_scales = num_scales
+        assert self.hid_dims % self.num_scales == 0
+        self.groups = groups
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.norm_type = norm_type
+        self.non_linearity_type = non_linearity_type
+        self.build_network()
+
+    def build_network(self):
+        self.convs = self.initial_conv_type(self.in_dims,
+                                            self.hid_dims,
+                                            self.cam_hid_dims,
+                                            self.num_scales,
+                                            norm_type=self.norm_type,
+                                            non_linearity_type=self.non_linearity_type,
+                                            conv_type=self.conv_type,
+                                            kernel_size=self.kernel_size,
+                                            stride=self.stride,
+                                            padding=self.padding)
+        self.non_linearity = build_non_linearity(self.non_linearity_type, self.cam_hid_dims)
+        self.cam = nn.Conv2d(
+            in_channels=self.cam_hid_dims,
+            out_channels=self.out_dims, kernel_size=1, padding=0)
+
+    def forward(self, x, y=None):
+        """
+        Returns CAM, logits
+        :param x:
+        :return: Returns CAM, logits
+        """
+        out = {}
+        out['exit_in'] = x
+        # if self.scale_factor != 1:
+        #     x = F.interpolate(x, scale_factor=self.scale_factor, align_corners=False, mode='bilinear')
 
         x = self.convs(x)
         x = self.non_linearity(x)
@@ -152,12 +266,12 @@ class MultiExitModule(nn.Module):
             exit_hid_dims=[None] * 4,
             exit_width_factors=[1 / 4] * 4,
             cam_width_factors=[1] * 4,
-            exit_scale_factors=[1] * 4,
             exit_kernel_sizes=[3] * 4,
             exit_strides=[None] * 4,
             exit_padding=[None] * 4,
             threshold=0.9,
             bias_amp_gamma=0,
+            num_scales=None,
             **kwargs
     ) -> None:
         """
@@ -180,13 +294,13 @@ class MultiExitModule(nn.Module):
         self.exit_hid_dims = exit_hid_dims
         self.exit_width_factors = exit_width_factors
         self.cam_width_factors = cam_width_factors
-        self.exit_scale_factors = exit_scale_factors
         self.exit_kernel_sizes = exit_kernel_sizes
         self.exit_strides = exit_strides
         self.exit_padding = exit_padding
         self.exits = []
         self.threshold = threshold
         self.bias_amp_gamma = bias_amp_gamma
+        self.num_scales = num_scales
 
     def build_and_add_exit(self, in_dims):
         exit_ix = len(self.exits)
@@ -201,8 +315,8 @@ class MultiExitModule(nn.Module):
             kernel_size=self.exit_kernel_sizes[exit_ix],
             stride=self.exit_strides[exit_ix],
             padding=self.exit_padding[exit_ix],
-            scale_factor=self.exit_scale_factors[exit_ix],
-            initial_conv_type=self.exit_initial_conv_type
+            initial_conv_type=self.exit_initial_conv_type,
+            num_scales=self.num_scales
         )
         self.exits.append(exit)
         self.exits = nn.ModuleList(self.exits)
@@ -215,7 +329,6 @@ class MultiExitModule(nn.Module):
         return self.exit_block_nums
 
     def forward(self, block_num_to_exit_in, y=None):
-        # assert self.bias_amp_gamma == 0, 'Bias amplification not supported'
         multi_exit_out = {}
         exit_ix = 0
         for block_num in block_num_to_exit_in:
@@ -405,7 +518,6 @@ def recursive_views(x, views, sobel=Sobel(), blur_sigma=2.0, contrast=1.0):
             x = x.mean(dim=1).unsqueeze(1).repeat(1, 3, 1, 1)
         elif v == 'contrast':
             x = T.adjust_contrast(x, contrast)
-
 
     return x
 

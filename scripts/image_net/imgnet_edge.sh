@@ -9,7 +9,7 @@ subset_percent=16
 precision=16
 temperature=5
 
-for model in occam_resnet18_v2_k9753_poe_detach; do
+for model in occam_resnet18_v2_multi_scale_exit; do
   for blur_sigma in 1; do
       for main_loss in CELoss; do
         for calibration_loss in MDCALoss; do

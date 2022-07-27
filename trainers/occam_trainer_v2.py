@@ -22,7 +22,7 @@ class OccamTrainerV2(BaseTrainer):
         assert hasattr(self.model, 'multi_exit')
         self.num_exits = len(self.model.multi_exit.exit_block_nums)
 
-    def forward(self, x, batch=None, batch_idx=None):
+    def forward(self, x, batch=None, batch_idx=None, loader_key=None):
         return self.model(x, batch['y'])
 
     def training_step(self, batch, batch_idx):
