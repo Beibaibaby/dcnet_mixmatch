@@ -27,9 +27,11 @@ class OccamTrainerV2MultiIn(OccamTrainerV2):
             self.multi_view = MultiView(input_views=self.trainer_cfg.input_views,
                                         blur_sigma=self.trainer_cfg.blur_sigma,
                                         contrast=self.trainer_cfg.contrast)
-        save_fname = None if (self.training or self.current_epoch > 0) else \
+        save_fname = None if (self.training) else \
             os.path.join(os.getcwd(), f'viz_{loader_key}', f'b{batch_idx}')
         return self.multi_view.create_views(x, save_fname)
+
+    # or self.current_epoch > 0
 
     def forward(self, x, batch=None, batch_idx=None, loader_key=None):
         x = self.create_views(x, batch_idx, loader_key)

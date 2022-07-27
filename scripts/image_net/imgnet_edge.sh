@@ -10,8 +10,7 @@ precision=16
 temperature=5
 
 for model in occam_resnet18_v2_k9753_poe_detach; do
-  for blur_sigma in 2; do
-    for contrast in 5 2 1; do
+  for blur_sigma in 1; do
       for main_loss in CELoss; do
         for calibration_loss in MDCALoss; do
           for calibration_loss_wt in 0; do
@@ -22,20 +21,18 @@ for model in occam_resnet18_v2_k9753_poe_detach; do
             trainer.precision=${precision} \
             trainer.main_loss=${main_loss} \
             trainer.blur_sigma=${blur_sigma} \
-            trainer.contrast=${contrast} \
-            trainer.input_views=['grayscale+blur+contrast'] \
+            trainer.input_views=['blur+edge'] \
             trainer.calibration_loss_wt=${calibration_loss_wt} \
             trainer.calibration_loss_wt=${calibration_loss_wt} \
             dataset=${dataset} \
             dataset.subset_percent=${subset_percent} \
             optimizer=${optim} \
-            expt_suffix=tmp_grayscale+blur${blur_sigma}+contrast${contrast}_temp${temperature}_subset${subset_percent}_prec${precision} \
-          trainer.limit_train_batches=1 \
-          trainer.limit_val_batches=1 \
-          trainer.limit_test_batches=10 \
-          trainer.check_val_every_n_epoch=1 \
-          optimizer.epochs=1
-          done
+            expt_suffix=blur${blur_sigma}_edge_temp${temperature}_subset${subset_percent}_prec${precision} \
+            trainer.limit_train_batches=1 \
+            trainer.limit_val_batches=1 \
+            trainer.limit_test_batches=10 \
+            trainer.check_val_every_n_epoch=1 \
+            optimizer.epochs=1
         done
       done
     done
