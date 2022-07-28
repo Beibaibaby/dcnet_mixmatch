@@ -4,7 +4,7 @@ import torch.utils.model_zoo as model_zoo
 import torch
 import torch.nn.functional as F
 
-__all__ = ['Res2Net', 'res2net18_v1b', 'res2net50_v1b', 'res2net101_v1b']
+# __all__ = ['Res2Net', 'res2net18_v1b', 'res2net50_v1b', 'res2net101_v1b']
 
 model_urls = {
     'res2net50_v1b_26w_4s': 'https://shanghuagao.oss-cn-beijing.aliyuncs.com/res2net/res2net50_v1b_26w_4s-3cf99910.pth',
@@ -54,6 +54,7 @@ class Basic2Block(nn.Module):
         self.stype = stype
         self.scale = scale
         self.width = width
+        self.out_dims = self.width * scale
 
     def forward(self, x):
         residual = x

@@ -2,7 +2,8 @@ import logging
 from models.variable_width_resnet import *
 from models.occam_resnet import *
 from models.occam_resnet_v2 import *
-from models.variable_width_res2net import *
+from models.res2net import *
+
 
 def build_model(model_config):
     if 'occam' in model_config.name and 'poe' in model_config.name:
