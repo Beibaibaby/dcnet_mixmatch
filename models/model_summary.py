@@ -31,6 +31,8 @@ if __name__ == "__main__":
     # from models.occam_resnet_not_v2 import *
     # from models.occam_resnet_v2_same_dim import *
     from models.occam_resnet_v2 import *
+    from models.occam_res2net import *
+    from models.res2net import *
 
     # m = resnet18(1000)  # 11689512
     # m = occam_resnet18(1000) # 11356671
@@ -44,7 +46,9 @@ if __name__ == "__main__":
     # m = occam_resnet18_v2_poe_detach_prev(1000)
     # m = occam_resnet18_v2_k3(1000)  # 15205162
     # m = occam_resnet18_v2_k9753(1000)  # 16846794
-    m = occam_resnet18_v2_k9753(1000)  # 28244954
+    # m = occam_resnet18_v2_k9753(1000)  # 28244954
+    # m = res2net18_v1b(1000)
+    m = occam_res2net18_poe_detach(1000, 5)
     print(m)
 
     # # https://stackoverflow.com/a/62764464/1122681

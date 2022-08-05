@@ -175,7 +175,7 @@ def get_target_layers(model):
     :param model:
     :return:
     """
-    if 'VariableWidthResNet' in type(model).__name__:
+    if 'VariableWidthResNet' in type(model).__name__ or 'Res2Net' in type(model).__name__:
         return [model.layer4[-1]]
     else:
         raise Exception(f"Specify the target layer for {type(model)}")

@@ -98,6 +98,7 @@ def occam_res2net_generic(num_classes,
                           bias_amp_gamma=0,
                           exit_type=ExitModule,
                           num_scales=None,
+                          exit_hid_dims=[None] * 4,
                           **kwargs):
     return OccamRes2Net(block=block,
                         layers=layers,
@@ -115,7 +116,8 @@ def occam_res2net_generic(num_classes,
                             'poe_temperature': poe_temperature,
                             'bias_amp_gamma': bias_amp_gamma,
                             'exit_type': exit_type,
-                            'num_scales': num_scales
+                            'num_scales': num_scales,
+                            'exit_hid_dims': exit_hid_dims
                         },
                         **kwargs)
 
@@ -127,6 +129,14 @@ def occam_res2net18_poe_detach(num_classes, temperature):
                                  baseWidth=16,
                                  multi_exit_type=MultiExitPoEDetachPrev,
                                  poe_temperature=temperature
+                                 )
+
+
+def occam_res2net18(num_classes):
+    return occam_res2net_generic(num_classes=num_classes,
+                                 block=Basic2Block,
+                                 layers=[2, 2, 2, 2],
+                                 baseWidth=16
                                  )
 
 

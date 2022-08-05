@@ -10,7 +10,7 @@ precision=16
 
 for temperature in 5 2 10; do
   for calibration_loss_wt in 0; do
-    for model in occam_resnet18_v2_k9753_poe_detach; do
+    for model in occam_res2net18_poe_detach; do
       for main_loss in CELoss; do
         for calibration_loss in MDCALoss; do
           CUDA_VISIBLE_DEVICES=${GPU} python main.py \
@@ -30,3 +30,9 @@ for temperature in 5 2 10; do
     done
   done
 done
+
+# \
+#          trainer.limit_train_batches=1 \
+#          trainer.limit_val_batches=1 \
+#          trainer.limit_test_batches=1 \
+#          optimizer.epochs=1

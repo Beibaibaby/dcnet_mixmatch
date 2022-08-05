@@ -15,7 +15,7 @@ model_urls = {
 class Basic2Block(nn.Module):
     expansion = 1
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None, baseWidth=26, scale=4, stype='normal'):
+    def __init__(self, inplanes, planes, stride=1, baseWidth=26, scale=4, stype='normal'):
         """ Constructor
         Args:
             inplanes: input channel dimensionality
@@ -50,11 +50,19 @@ class Basic2Block(nn.Module):
         # self.bn3 = nn.BatchNorm2d(planes * self.expansion)
 
         self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
         self.stype = stype
         self.scale = scale
         self.width = width
         self.out_dims = self.width * scale
+        self.downsample = None
+        if stride != 1 or inplanes != self.out_dims:
+            self.downsample = nn.Sequential(
+                nn.AvgPool2d(kernel_size=stride, stride=stride,
+                             ceil_mode=True, count_include_pad=False),
+                nn.Conv2d(inplanes, self.out_dims,
+                          kernel_size=1, stride=1, bias=False),
+                nn.BatchNorm2d(self.out_dims),
+            )
 
     def forward(self, x):
         residual = x
@@ -90,12 +98,13 @@ class Basic2Block(nn.Module):
         out = self.relu(out)
 
         return out
+    #
 
 
 class Bottle2neck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None, baseWidth=26, scale=4, stype='normal'):
+    def __init__(self, inplanes, planes, stride=1, baseWidth=26, scale=4, stype='normal'):
         """ Constructor
         Args:
             inplanes: input channel dimensionality
@@ -130,10 +139,20 @@ class Bottle2neck(nn.Module):
         self.bn3 = nn.BatchNorm2d(planes * self.expansion)
 
         self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
         self.stype = stype
         self.scale = scale
         self.width = width
+        self.out_dims = planes * self.expansion
+        self.downsample = None
+        if stride != 1 or inplanes != self.out_dims:
+            self.downsample = nn.Sequential(
+                nn.AvgPool2d(kernel_size=stride, stride=stride,
+                             ceil_mode=True, count_include_pad=False),
+                nn.Conv2d(inplanes, self.out_dims,
+                          kernel_size=1, stride=1, bias=False),
+                nn.BatchNorm2d(self.out_dims),
+            )
+
 
     def forward(self, x):
         residual = x
@@ -195,7 +214,7 @@ class Res2Net(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.fc = nn.Linear(self.layer4[-1].out_dims, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -205,20 +224,15 @@ class Res2Net(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def _make_layer(self, block, planes, blocks, stride=1):
-        downsample = None
-        if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Sequential(
-                nn.AvgPool2d(kernel_size=stride, stride=stride,
-                             ceil_mode=True, count_include_pad=False),
-                nn.Conv2d(self.inplanes, planes * block.expansion,
-                          kernel_size=1, stride=1, bias=False),
-                nn.BatchNorm2d(planes * block.expansion),
-            )
-
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample=downsample,
+        layers.append(block(self.inplanes, planes, stride,
                             stype='stage', baseWidth=self.baseWidth, scale=self.scale))
-        self.inplanes = planes * block.expansion
+
+        if block == Basic2Block:
+            self.inplanes = layers[-1].out_dims
+        else:
+            self.inplanes = planes * block.expansion
+        # self.inplanes = planes * block.expansion
         for i in range(1, blocks):
             layers.append(block(self.inplanes, planes, baseWidth=self.baseWidth, scale=self.scale))
 
@@ -242,20 +256,13 @@ class Res2Net(nn.Module):
         return x
 
 
-def res2net18_v1b(num_classes):
-    model = Res2Net(Basic2Block, [2, 2, 2, 2], baseWidth=16, scale=4, num_classes=num_classes)
+def res2net18_v1b(num_classes, baseWidth=36):
+    model = Res2Net(Basic2Block, [2, 2, 2, 2], baseWidth=baseWidth, scale=4, num_classes=num_classes)
     return model
 
 
-def res2net50_v1b(pretrained=False, **kwargs):
-    """Constructs a Res2Net-50_v1b model.
-    Res2Net-50 refers to the Res2Net-50_v1b_26w_4s.
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = Res2Net(Bottle2neck, [3, 4, 6, 3], baseWidth=26, scale=4, **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['res2net50_v1b_26w_4s']))
+def res2net50_v1b(num_classes):
+    model = Res2Net(Bottle2neck, [3, 4, 6, 3], baseWidth=26, scale=4, num_classes=num_classes)
     return model
 
 
@@ -305,7 +312,7 @@ def res2net152_v1b_26w_4s(pretrained=False, **kwargs):
 
 if __name__ == '__main__':
     images = torch.rand(1, 3, 224, 224).cuda(0)
-    model = res2net18_v1b()
+    model = res2net18_v1b(1000, baseWidth=26)
     print(model)
     model = model.cuda(0)
     print(model(images).size())
