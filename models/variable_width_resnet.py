@@ -239,14 +239,14 @@ def resnet10vw(width=64, pretrained=False, progress=True, **kwargs):
     return _vwresnet('resnet10', BasicBlock, [1, 1, 1, 1], width, pretrained, progress, **kwargs)
 
 
-def resnet18vw(width=64, pretrained=False, progress=True, **kwargs):
+def resnet18vw(width=64, pretrained=False, progress=True, block_type=BasicBlock, **kwargs):
     r"""ResNet-18 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _vwresnet('resnet18', BasicBlock, [2, 2, 2, 2], width, pretrained, progress, **kwargs)
+    return _vwresnet('resnet18', block_type, [2, 2, 2, 2], width, pretrained, progress, **kwargs)
 
 
 def resnet34vw(width=64, pretrained=False, progress=True, **kwargs):
@@ -279,6 +279,10 @@ def resnet10(num_classes):
 
 def resnet18(num_classes):
     return resnet18vw(64, num_classes=num_classes)
+
+
+def resnet18_bottleneck(num_classes):
+    return resnet18vw(64, num_classes=num_classes, block_type=Bottleneck)
 
 
 def resnet18_pretrained(num_classes):

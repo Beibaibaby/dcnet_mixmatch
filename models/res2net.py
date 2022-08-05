@@ -153,7 +153,6 @@ class Bottle2neck(nn.Module):
                 nn.BatchNorm2d(self.out_dims),
             )
 
-
     def forward(self, x):
         residual = x
 
@@ -258,6 +257,11 @@ class Res2Net(nn.Module):
 
 def res2net18_v1b(num_classes, baseWidth=36):
     model = Res2Net(Basic2Block, [2, 2, 2, 2], baseWidth=baseWidth, scale=4, num_classes=num_classes)
+    return model
+
+
+def res2net18_bottleneck(num_classes, baseWidth=26):
+    model = Res2Net(Bottle2neck, [2, 2, 2, 2], baseWidth=baseWidth, scale=4, num_classes=num_classes)
     return model
 
 

@@ -48,8 +48,11 @@ if __name__ == "__main__":
     # m = occam_resnet18_v2_k9753(1000)  # 16846794
     # m = occam_resnet18_v2_k9753(1000)  # 28244954
     # m = res2net18_v1b(1000)
-    m = occam_res2net18_poe_detach(1000, 5)
-    print(m)
+    # m = occam_res2net18_poe_detach(1000, 5)
+    # print(m)
+
+    m = resnet18_bottleneck(1000) # 15,995,176
+    # m = res2net18_bottleneck(1000) # 15,897,448
 
     # # https://stackoverflow.com/a/62764464/1122681
     total_params = sum(dict((p.data_ptr(), p.numel()) for p in m.parameters()).values())
