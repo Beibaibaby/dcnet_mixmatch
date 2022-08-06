@@ -50,7 +50,7 @@ if __name__ == "__main__":
     # m = res2net18_v1b(1000)
     # m = occam_res2net18_poe_detach(1000, 5)
     # print(m)
-
+    # print(count_num_of_layers(resnet18_bottleneck(10)))
     m = resnet18_bottleneck(1000) # 15,995,176
     # m = res2net18_bottleneck(1000) # 15,897,448
 

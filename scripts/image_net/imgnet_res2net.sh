@@ -1,7 +1,7 @@
 #!/bin/bash
 source activate occamnets
 
-GPU=2
+GPU=1
 
 dataset=image_net
 optim=image_net
@@ -14,6 +14,7 @@ trainer=base_trainer \
 trainer.precision=${precision} \
 dataset=${dataset} \
 dataset.subset_percent=${subset_percent} \
+dataset.batch_size=256 \
 optimizer=${optim} \
 expt_suffix=subset_${subset_percent}_prec_${precision}
 
