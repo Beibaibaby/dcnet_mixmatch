@@ -461,7 +461,7 @@ class MultiExitStats:
 
 
 class MultiView():
-    def __init__(self, input_views=['edge', 'rgb'], blur_sigma=None, contrast=None):
+    def __init__(self, input_views=['edge', 'same'], blur_sigma=None, contrast=None):
         self.sobel = Sobel()
         self.input_views = input_views
         self.blur_sigma = blur_sigma
@@ -471,7 +471,7 @@ class MultiView():
         x_list = []
         for v in self.input_views:
             sub_views = v.split("+")
-            out_x = recursive_views(x, sub_views, blur_sigma=self.blur_sigma, contrast=self.contrast)
+            out_x = apply_views(x, sub_views, blur_sigma=self.blur_sigma, contrast=self.contrast)
             x_list.append(out_x)
             if save_fname is not None:
                 os.makedirs(data_utils.get_dir(save_fname), exist_ok=True)
@@ -506,9 +506,12 @@ class Sobel(nn.Module):
         return x
 
 
-def recursive_views(x, views, sobel=Sobel(), blur_sigma=2.0, contrast=1.0):
+def apply_views(x, views, sobel=Sobel(), blur_sigma=2.0, contrast=1.0):
+    """
+    Applies the provided 'views' i.e., transformations
+    """
     for v in views:
-        if v == 'rgb':
+        if v == 'same':
             x = x
         elif v == 'blur':
             x = T.gaussian_blur(x, kernel_size=3, sigma=blur_sigma)

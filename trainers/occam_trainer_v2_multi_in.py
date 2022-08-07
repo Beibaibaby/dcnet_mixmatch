@@ -23,13 +23,16 @@ class OccamTrainerV2MultiIn(OccamTrainerV2):
         self.num_exits = len(self.model.multi_exit.exit_block_nums)
 
     def create_views(self, x, batch_idx, loader_key):
-        if not hasattr(self, 'multi_view'):
-            self.multi_view = MultiView(input_views=self.trainer_cfg.input_views,
-                                        blur_sigma=self.trainer_cfg.blur_sigma,
-                                        contrast=self.trainer_cfg.contrast)
+        # if not hasattr(self, 'multi_view'):
+        #     self.multi_view = MultiView(input_views=self.trainer_cfg.input_views,
+        #                                 blur_sigma=self.trainer_cfg.blur_sigma,
+        #                                 contrast=self.trainer_cfg.contrast)
         save_fname = None if (self.training) else \
             os.path.join(os.getcwd(), f'viz_{loader_key}', f'b{batch_idx}')
-        return self.multi_view.create_views(x, save_fname)
+        multi_view = MultiView(input_views=self.trainer_cfg.input_views,
+                               blur_sigma=self.trainer_cfg.blur_sigma,
+                               contrast=self.trainer_cfg.contrast)
+        return multi_view.create_views(x, save_fname)
 
     # or self.current_epoch > 0
 

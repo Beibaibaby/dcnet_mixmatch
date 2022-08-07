@@ -17,7 +17,7 @@ class OccamResNetV2(VariableWidthResNet):
             multi_exit_type=MultiExitModule,
             exits_kwargs=None,
             # Others
-            num_views=1,
+            input_views=['rgb'],
             separate_views_upto=0
     ) -> None:
         """
@@ -33,10 +33,11 @@ class OccamResNetV2(VariableWidthResNet):
                          initial_stride=initial_stride,
                          initial_padding=initial_padding,
                          use_initial_max_pooling=use_initial_max_pooling,
-                         num_views=num_views,
+                         num_views=len(input_views),
                          separate_views_upto=separate_views_upto)
         self.exits_cfg = exits_kwargs
         del self.fc
+        self.input_views = input_views
 
         multi_exit = multi_exit_type(**exits_kwargs)
         for i in range(0, 4):
@@ -58,6 +59,7 @@ class OccamResNetV2(VariableWidthResNet):
 
     def forward(self, x, y=None):
         block_num_to_exit_in = {}
+        x = MultiView(self.input_views)(x)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -133,7 +135,7 @@ def occam_resnet18_v2_generic(num_classes,
                               exit_width_factors=[1] * 4,
                               cam_width_factors=[1] * 4,
                               detached_exit_ixs=[0],
-                              num_views=1,
+                              input_views=['rgb'],
                               separate_views_upto=0,
                               poe_temperature=None,
                               bias_amp_gamma=0,
@@ -153,7 +155,7 @@ def occam_resnet18_v2_generic(num_classes,
                                  'exit_type': exit_type,
                                  'num_scales': num_scales
                              },
-                             num_views=num_views,
+                             input_views=input_views,
                              separate_views_upto=separate_views_upto)
 
 
@@ -197,6 +199,7 @@ def occam_resnet18_v2_multi_scale1_exit_poe_detach(num_classes, temperature):
                                    exit_type=MultiScaleExitModule,
                                    multi_exit_type=MultiExitPoEDetachPrev,
                                    poe_temperature=temperature)
+
 
 def occam_resnet18_v2_multi_scale2_exit_poe_detach(num_classes, temperature):
     return occam_resnet18_v2_k9753(num_classes,
