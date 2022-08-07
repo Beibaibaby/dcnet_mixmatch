@@ -4,6 +4,7 @@ from models.occam_resnet import *
 from models.occam_resnet_v2 import *
 from models.res2net import *
 from models.occam_res2net import *
+from models.res2net_mv import *
 
 
 def build_model(model_config):

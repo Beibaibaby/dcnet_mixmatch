@@ -32,7 +32,7 @@ class OccamTrainerV2MultiIn(OccamTrainerV2):
         multi_view = MultiView(input_views=self.trainer_cfg.input_views,
                                blur_sigma=self.trainer_cfg.blur_sigma,
                                contrast=self.trainer_cfg.contrast)
-        return multi_view.create_views(x, save_fname)
+        return multi_view.__call__(x, save_fname)
 
     # or self.current_epoch > 0
 

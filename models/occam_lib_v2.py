@@ -461,17 +461,19 @@ class MultiExitStats:
 
 
 class MultiView():
-    def __init__(self, input_views=['edge', 'same'], blur_sigma=None, contrast=None):
+    def __init__(self, input_views=['edge', 'same'], edge_blur_sigmas=[0.1, 1.0, 2.0], blur_sigma=None, contrast=None):
         self.sobel = Sobel()
         self.input_views = input_views
+        self.edge_blur_sigmas = edge_blur_sigmas
         self.blur_sigma = blur_sigma
         self.contrast = contrast
 
-    def create_views(self, x, save_fname=None):
+    def __call__(self, x, save_fname=None):
         x_list = []
         for v in self.input_views:
             sub_views = v.split("+")
-            out_x = apply_views(x, sub_views, blur_sigma=self.blur_sigma, contrast=self.contrast)
+            out_x = apply_views(x, sub_views, edge_blur_sigmas=self.edge_blur_sigmas, blur_sigma=self.blur_sigma,
+                                contrast=self.contrast)
             x_list.append(out_x)
             if save_fname is not None:
                 os.makedirs(data_utils.get_dir(save_fname), exist_ok=True)
@@ -506,22 +508,23 @@ class Sobel(nn.Module):
         return x
 
 
-def apply_views(x, views, sobel=Sobel(), blur_sigma=2.0, contrast=1.0):
+def apply_views(x, views, sobel=Sobel(), edge_blur_sigmas=[0.1, 1.0, 2.0], blur_sigma=2.0, contrast=1.0):
     """
     Applies the provided 'views' i.e., transformations
     """
+
     for v in views:
-        if v == 'same':
-            x = x
-        elif v == 'blur':
+        if v == 'blur':
             x = T.gaussian_blur(x, kernel_size=3, sigma=blur_sigma)
         elif v == 'edge':
-            x = sobel(x.mean(dim=1, keepdims=True)).repeat(1, 3, 1, 1)
+            x1 = sobel(T.gaussian_blur(x, kernel_size=3, sigma=edge_blur_sigmas[0]).mean(dim=1, keepdims=True))
+            x2 = sobel(T.gaussian_blur(x, kernel_size=3, sigma=edge_blur_sigmas[1]).mean(dim=1, keepdims=True))
+            x3 = sobel(T.gaussian_blur(x, kernel_size=3, sigma=edge_blur_sigmas[2]).mean(dim=1, keepdims=True))
+            x = torch.cat((x1, x2, x3), dim=1)
         elif v == 'grayscale':
             x = x.mean(dim=1).unsqueeze(1).repeat(1, 3, 1, 1)
         elif v == 'contrast':
             x = T.adjust_contrast(x, contrast)
-
     return x
 
 

@@ -1,15 +1,17 @@
-import torch.nn as nn
-import math
-import torch.utils.model_zoo as model_zoo
-import torch
-import torch.nn.functional as F
+import logging
+
 from models.res2net import *
+from models.occam_lib_v2 import MultiView
 
 
-class Bottle2neck(nn.Module):
+class SepComboBlock(Bottle2neck):
+    """
+    Processes channels in a grouped manner
+    But, combines them too
+    """
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, baseWidth=26, scale=4, stype='normal'):
+    def __init__(self, inplanes, planes, stride=1, baseWidth=26, scale=None, stype='normal'):
         """ Constructor
         Args:
             inplanes: input channel dimensionality
@@ -23,7 +25,8 @@ class Bottle2neck(nn.Module):
         super(Bottle2neck, self).__init__()
 
         width = int(math.floor(planes * (baseWidth / 64.0)))
-        self.conv1 = nn.Conv2d(inplanes, width * scale, kernel_size=1, bias=False)
+        self.conv1 = nn.Conv2d(inplanes, width * scale, kernel_size=1, bias=False,
+                               groups=scale)
         self.bn1 = nn.BatchNorm2d(width * scale)
 
         if scale == 1:
@@ -39,78 +42,48 @@ class Bottle2neck(nn.Module):
             bns.append(nn.BatchNorm2d(width))
         self.convs = nn.ModuleList(convs)
         self.bns = nn.ModuleList(bns)
+        self.out_dims = math.ceil(planes * self.expansion / scale) * scale
 
-        self.conv3 = nn.Conv2d(width * scale, planes * self.expansion, kernel_size=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(planes * self.expansion)
+        self.conv3 = nn.Conv2d(width * scale, self.out_dims, kernel_size=1, bias=False,
+                               groups=scale)
+        self.bn3 = nn.BatchNorm2d(self.out_dims)
 
         self.relu = nn.ReLU(inplace=True)
         self.stype = stype
         self.scale = scale
         self.width = width
-        self.out_dims = planes * self.expansion
         self.downsample = None
         if stride != 1 or inplanes != self.out_dims:
             self.downsample = nn.Sequential(
                 nn.AvgPool2d(kernel_size=stride, stride=stride,
                              ceil_mode=True, count_include_pad=False),
                 nn.Conv2d(inplanes, self.out_dims,
-                          kernel_size=1, stride=1, bias=False),
+                          kernel_size=1, stride=1, bias=False, groups=scale),
                 nn.BatchNorm2d(self.out_dims),
             )
 
-    def forward(self, x):
-        residual = x
 
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
+class MultiViewRes2Net(nn.Module):
 
-        spx = torch.split(out, self.width, 1)
-        for i in range(self.nums):
-            if i == 0 or self.stype == 'stage':
-                sp = spx[i]
-            else:
-                sp = sp + spx[i]
-            sp = self.convs[i](sp)
-            sp = self.relu(self.bns[i](sp))
-            if i == 0:
-                out = sp
-            else:
-                out = torch.cat((out, sp), 1)
-        if self.scale != 1 and self.stype == 'normal':
-            out = torch.cat((out, spx[self.nums]), 1)
-        elif self.scale != 1 and self.stype == 'stage':
-            out = torch.cat((out, self.pool(spx[self.nums])), 1)
-
-        out = self.conv3(out)
-        out = self.bn3(out)
-
-        if self.downsample is not None:
-            residual = self.downsample(x)
-
-        out += residual
-        out = self.relu(out)
-
-        return out
-
-
-class Res2Net(nn.Module):
-
-    def __init__(self, block, layers, baseWidth=26, scale=4, num_classes=1000):
-        self.inplanes = 64
-        super(Res2Net, self).__init__()
+    def __init__(self, block, layers, baseWidth=26, num_views=3, num_classes=1000,
+                 input_views=['edge', 'grayscale', 'same']):
+        super(MultiViewRes2Net, self).__init__()
         self.baseWidth = baseWidth
-        self.scale = scale
+        self.num_views = num_views
+        conv1_width = 16 * num_views
+        self.inplanes = math.ceil(64 / num_views) * num_views
         self.conv1 = nn.Sequential(
-            nn.Conv2d(3, 32, 3, 2, 1, bias=False),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(3 * num_views, conv1_width, 3, 2, 1, bias=False,
+                      groups=num_views),
+            nn.BatchNorm2d(conv1_width),
             nn.ReLU(inplace=True),
-            nn.Conv2d(32, 32, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(conv1_width, conv1_width, 3, 1, 1, bias=False, groups=num_views),
+            nn.BatchNorm2d(conv1_width),
             nn.ReLU(inplace=True),
-            nn.Conv2d(32, 64, 3, 1, 1, bias=False)
+            nn.Conv2d(conv1_width, self.inplanes, 3, 1, 1, bias=False, groups=num_views)
         )
-        self.bn1 = nn.BatchNorm2d(64)
+        self.input_views = input_views
+        self.bn1 = nn.BatchNorm2d(self.inplanes)
         self.relu = nn.ReLU()
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0])
@@ -130,19 +103,16 @@ class Res2Net(nn.Module):
     def _make_layer(self, block, planes, blocks, stride=1):
         layers = []
         layers.append(block(self.inplanes, planes, stride,
-                            stype='stage', baseWidth=self.baseWidth, scale=self.scale))
+                            stype='stage', baseWidth=self.baseWidth, scale=len(self.input_views)))
 
-        if block == Basic2Block:
-            self.inplanes = layers[-1].out_dims
-        else:
-            self.inplanes = planes * block.expansion
-        # self.inplanes = planes * block.expansion
+        self.inplanes = layers[-1].out_dims
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes, baseWidth=self.baseWidth, scale=self.scale))
+            layers.append(block(self.inplanes, planes, baseWidth=self.baseWidth, scale=len(self.input_views)))
 
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        x = MultiView(self.input_views)(x)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -160,68 +130,29 @@ class Res2Net(nn.Module):
         return x
 
 
-def res2net18_v1b(num_classes, baseWidth=36):
-    model = Res2Net(Basic2Block, [2, 2, 2, 2], baseWidth=baseWidth, scale=4, num_classes=num_classes)
+def res2net26_edge_gs_rgb(num_classes, baseWidth=26):
+    model = MultiViewRes2Net(SepComboBlock, [2, 2, 2, 2], baseWidth=baseWidth,
+                             input_views=['edge', 'grayscale', 'same'],
+                             num_classes=num_classes)
     return model
 
 
-def res2net18_bottleneck(num_classes, baseWidth=26):
-    model = Res2Net(Bottle2neck, [2, 2, 2, 2], baseWidth=baseWidth, scale=4, num_classes=num_classes)
+def res2net26_rgb_gs_edge(num_classes, baseWidth=26):
+    model = MultiViewRes2Net(SepComboBlock, [2, 2, 2, 2], baseWidth=baseWidth,
+                             input_views=['edge', 'grayscale', 'same'],
+                             num_classes=num_classes)
     return model
 
 
-def res2net50_v1b(num_classes):
-    model = Res2Net(Bottle2neck, [3, 4, 6, 3], baseWidth=26, scale=4, num_classes=num_classes)
-    return model
-
-
-def res2net101_v1b(pretrained=False, **kwargs):
-    """Constructs a Res2Net-50_v1b_26w_4s model.
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = Res2Net(Bottle2neck, [3, 4, 23, 3], baseWidth=26, scale=4, **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['res2net101_v1b_26w_4s']))
-    return model
-
-
-def res2net50_v1b_26w_4s(pretrained=False, **kwargs):
-    """Constructs a Res2Net-50_v1b_26w_4s model.
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = Res2Net(Bottle2neck, [3, 4, 6, 3], baseWidth=26, scale=4, **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['res2net50_v1b_26w_4s']))
-    return model
-
-
-def res2net101_v1b_26w_4s(pretrained=False, **kwargs):
-    """Constructs a Res2Net-50_v1b_26w_4s model.
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = Res2Net(Bottle2neck, [3, 4, 23, 3], baseWidth=26, scale=4, **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['res2net101_v1b_26w_4s']))
-    return model
-
-
-def res2net152_v1b_26w_4s(pretrained=False, **kwargs):
-    """Constructs a Res2Net-50_v1b_26w_4s model.
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = Res2Net(Bottle2neck, [3, 8, 36, 3], baseWidth=26, scale=4, **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['res2net152_v1b_26w_4s']))
+def res2net26_rgb_rgb_rgb(num_classes, baseWidth=26):
+    model = MultiViewRes2Net(SepComboBlock, [2, 2, 2, 2], baseWidth=baseWidth, input_views=['same', 'same', 'same'],
+                             num_classes=num_classes)
     return model
 
 
 if __name__ == '__main__':
-    images = torch.rand(1, 3, 224, 224).cuda(0)
-    model = res2net18_v1b(1000, baseWidth=26)
+    images = torch.rand(5, 3, 224, 224).cuda(0)
+    model = res2net26_edge_gs_rgb(10)
     print(model)
     model = model.cuda(0)
     print(model(images).size())
