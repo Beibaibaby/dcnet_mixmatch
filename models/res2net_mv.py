@@ -11,7 +11,7 @@ class SepComboBlock(Bottle2neck):
     """
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, baseWidth=26, scale=None, stype='normal'):
+    def __init__(self, inplanes, planes, stride=1, baseWidth=56, scale=None, stype='normal'):
         """ Constructor
         Args:
             inplanes: input channel dimensionality
@@ -65,7 +65,7 @@ class SepComboBlock(Bottle2neck):
 
 class MultiViewRes2Net(nn.Module):
 
-    def __init__(self, block, layers, baseWidth=26, num_views=3, num_classes=1000,
+    def __init__(self, block, layers, baseWidth=56, num_views=3, num_classes=1000,
                  input_views=['edge', 'grayscale', 'same']):
         super(MultiViewRes2Net, self).__init__()
         self.baseWidth = baseWidth
@@ -130,21 +130,21 @@ class MultiViewRes2Net(nn.Module):
         return x
 
 
-def res2net26_edge_gs_rgb(num_classes, baseWidth=26):
+def res2net26_edge_gs_rgb(num_classes, baseWidth=56):
     model = MultiViewRes2Net(SepComboBlock, [2, 2, 2, 2], baseWidth=baseWidth,
                              input_views=['edge', 'grayscale', 'same'],
                              num_classes=num_classes)
     return model
 
 
-def res2net26_rgb_gs_edge(num_classes, baseWidth=26):
+def res2net26_rgb_gs_edge(num_classes, baseWidth=56):
     model = MultiViewRes2Net(SepComboBlock, [2, 2, 2, 2], baseWidth=baseWidth,
                              input_views=['edge', 'grayscale', 'same'],
                              num_classes=num_classes)
     return model
 
 
-def res2net26_rgb_rgb_rgb(num_classes, baseWidth=26):
+def res2net26_rgb_rgb_rgb(num_classes, baseWidth=56):
     model = MultiViewRes2Net(SepComboBlock, [2, 2, 2, 2], baseWidth=baseWidth, input_views=['same', 'same', 'same'],
                              num_classes=num_classes)
     return model
