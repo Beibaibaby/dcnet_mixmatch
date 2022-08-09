@@ -24,34 +24,34 @@ class SepComboBlock(Bottle2neck):
         """
         super(Bottle2neck, self).__init__()
 
-        width = int(math.floor(planes * (baseWidth / 64.0)))
-        self.conv1 = nn.Conv2d(inplanes, width * scale, kernel_size=1, bias=False,
+        grp_width = int(math.floor(planes * (baseWidth / 64.0)))
+        self.conv1 = nn.Conv2d(inplanes, grp_width * scale, kernel_size=1, bias=False,
                                groups=scale)
-        self.bn1 = nn.BatchNorm2d(width * scale)
+        self.bn1 = nn.BatchNorm2d(grp_width * scale)
 
         if scale == 1:
-            self.nums = 1
+            self.num_convs2 = 1
         else:
-            self.nums = scale - 1
+            self.num_convs2 = scale - 1
         if stype == 'stage':
             self.pool = nn.AvgPool2d(kernel_size=3, stride=stride, padding=1)
         convs = []
         bns = []
-        for i in range(self.nums):
-            convs.append(nn.Conv2d(width, width, kernel_size=3, stride=stride, padding=1, bias=False))
-            bns.append(nn.BatchNorm2d(width))
+        for i in range(self.num_convs2):
+            convs.append(nn.Conv2d(grp_width, grp_width, kernel_size=3, stride=stride, padding=1, bias=False))
+            bns.append(nn.BatchNorm2d(grp_width))
         self.convs = nn.ModuleList(convs)
         self.bns = nn.ModuleList(bns)
         self.out_dims = math.ceil(planes * self.expansion / scale) * scale
 
-        self.conv3 = nn.Conv2d(width * scale, self.out_dims, kernel_size=1, bias=False,
+        self.conv3 = nn.Conv2d(grp_width * scale, self.out_dims, kernel_size=1, bias=False,
                                groups=scale)
         self.bn3 = nn.BatchNorm2d(self.out_dims)
 
         self.relu = nn.ReLU(inplace=True)
         self.stype = stype
         self.scale = scale
-        self.width = width
+        self.width = grp_width
         self.downsample = None
         if stride != 1 or inplanes != self.out_dims:
             self.downsample = nn.Sequential(
@@ -65,22 +65,22 @@ class SepComboBlock(Bottle2neck):
 
 class MultiViewRes2Net(nn.Module):
 
-    def __init__(self, block, layers, baseWidth=56, num_views=3, num_classes=1000,
+    def __init__(self, block, layers, baseWidth=56, num_classes=1000,
                  input_views=['edge', 'grayscale', 'same']):
         super(MultiViewRes2Net, self).__init__()
         self.baseWidth = baseWidth
-        self.num_views = num_views
-        conv1_width = 16 * num_views
-        self.inplanes = math.ceil(64 / num_views) * num_views
+        self.num_views = len(input_views)
+        conv1_width = 16 * self.num_views
+        self.inplanes = math.ceil(64 / self.num_views) * self.num_views
         self.conv1 = nn.Sequential(
-            nn.Conv2d(3 * num_views, conv1_width, 3, 2, 1, bias=False,
-                      groups=num_views),
+            nn.Conv2d(3 * self.num_views, conv1_width, 3, 2, 1, bias=False,
+                      groups=self.num_views),
             nn.BatchNorm2d(conv1_width),
             nn.ReLU(inplace=True),
-            nn.Conv2d(conv1_width, conv1_width, 3, 1, 1, bias=False, groups=num_views),
+            nn.Conv2d(conv1_width, conv1_width, 3, 1, 1, bias=False, groups=self.num_views),
             nn.BatchNorm2d(conv1_width),
             nn.ReLU(inplace=True),
-            nn.Conv2d(conv1_width, self.inplanes, 3, 1, 1, bias=False, groups=num_views)
+            nn.Conv2d(conv1_width, self.inplanes, 3, 1, 1, bias=False, groups=self.num_views)
         )
         self.input_views = input_views
         self.bn1 = nn.BatchNorm2d(self.inplanes)
@@ -136,10 +136,10 @@ def res2net26_edge_gs_rgb(num_classes, baseWidth=56):
                              num_classes=num_classes)
     return model
 
-
+# re-run
 def res2net26_rgb_gs_edge(num_classes, baseWidth=56):
     model = MultiViewRes2Net(SepComboBlock, [2, 2, 2, 2], baseWidth=baseWidth,
-                             input_views=['edge', 'grayscale', 'same'],
+                             input_views=['same', 'grayscale', 'edge'],
                              num_classes=num_classes)
     return model
 

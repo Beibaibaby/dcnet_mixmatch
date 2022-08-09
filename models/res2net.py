@@ -122,14 +122,14 @@ class Bottle2neck(nn.Module):
         self.bn1 = nn.BatchNorm2d(width * scale)
 
         if scale == 1:
-            self.nums = 1
+            self.num_convs2 = 1
         else:
-            self.nums = scale - 1
+            self.num_convs2 = scale - 1
         if stype == 'stage':
             self.pool = nn.AvgPool2d(kernel_size=3, stride=stride, padding=1)
         convs = []
         bns = []
-        for i in range(self.nums):
+        for i in range(self.num_convs2):
             convs.append(nn.Conv2d(width, width, kernel_size=3, stride=stride, padding=1, bias=False))
             bns.append(nn.BatchNorm2d(width))
         self.convs = nn.ModuleList(convs)
@@ -161,7 +161,7 @@ class Bottle2neck(nn.Module):
         out = self.relu(out)
 
         spx = torch.split(out, self.width, 1)
-        for i in range(self.nums):
+        for i in range(self.num_convs2):
             if i == 0 or self.stype == 'stage':
                 sp = spx[i]
             else:
@@ -173,9 +173,9 @@ class Bottle2neck(nn.Module):
             else:
                 out = torch.cat((out, sp), 1)
         if self.scale != 1 and self.stype == 'normal':
-            out = torch.cat((out, spx[self.nums]), 1)
+            out = torch.cat((out, spx[self.num_convs2]), 1)
         elif self.scale != 1 and self.stype == 'stage':
-            out = torch.cat((out, self.pool(spx[self.nums])), 1)
+            out = torch.cat((out, self.pool(spx[self.num_convs2])), 1)
 
         out = self.conv3(out)
         out = self.bn3(out)
