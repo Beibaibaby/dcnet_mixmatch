@@ -352,7 +352,10 @@ class MultiExitModule(nn.Module):
                 if exited is None:
                     multi_exit_out['logits'] = torch.zeros_like(logits)
                     exited = torch.zeros(len(logits)).to(logits.device)
-                p_max = F.softmax(logits, dim=1).max(dim=1)[0]
+                if len(logits.shape) > 1:
+                    p_max = F.softmax(logits, dim=1).max(dim=1)[0]
+                else:
+                    p_max = F.softmax(logits).max()
                 exit_here = torch.where((p_max > self.threshold).long() * (1 - exited))[0]
                 multi_exit_out['logits'][exit_here] = logits[exit_here]
                 exited[exit_here] = 1

@@ -4,24 +4,77 @@ from models.variable_width_resnet import *
 from models.occam_lib_v2 import MultiView
 
 
+class BasicBlockMV(nn.Module):
+    expansion = 1
+    __constants__ = ['downsample']
+
+    def __init__(self, inplanes, grp_width, stride=1, downsample=None, groups=1,
+                 base_width=56, dilation=1, norm_layer=None):
+        super(BasicBlockMV, self).__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+
+        self.groups = groups
+        # grp_width = int(math.floor(planes * (base_width / 64.0)))
+        self.grp_width = grp_width
+        width = grp_width * groups
+        self.conv1 = conv3x3(inplanes, width, stride, groups=groups)
+        self.bn1 = norm_layer(width)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3(width, width, groups=groups)
+        self.bn2 = norm_layer(width)
+        self.downsample = downsample
+        self.stride = stride
+        self.out_dims = grp_width * groups
+
+    def forward(self, x):
+        identity = x
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        spx = torch.split(out, self.grp_width, 1)
+        for i in range(self.groups):
+            if i == 0:
+                sp = spx[i]
+            else:
+                sp = sp + spx[i]
+
+            if i == 0:
+                out2 = sp
+            else:
+                out2 = torch.cat((out2, sp), 1)
+        out = out2
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+
+
 class BottleneckMV(nn.Module):
     expansion = 4
     __constants__ = ['downsample']
 
-    def __init__(self, inplanes, planes, stride=1, groups=None,
-                 base_width=56, dilation=1, norm_layer=None, downsample=None):
+    def __init__(self, inplanes, grp_width, stride=1, downsample=None, groups=None,
+                 base_width=56, dilation=1, norm_layer=None):
         super(BottleneckMV, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         self.groups = groups
-        grp_width = int(math.floor(planes * (base_width / 64.0)))
+        # grp_width = int(math.floor(planes * (base_width / 64.0)))
         self.grp_width = grp_width
         width = grp_width * groups
         self.conv1 = conv1x1(inplanes, width, groups=groups)
         self.bn1 = norm_layer(width)
         self.conv2 = conv3x3(width, width, stride, groups, dilation)
         self.bn2 = norm_layer(width)
-        self.out_dims = math.ceil(planes * self.expansion / groups) * groups
+        self.out_dims = grp_width * self.expansion * groups
         self.conv3 = conv1x1(width, self.out_dims, groups=groups)
         self.bn3 = norm_layer(self.out_dims)
         self.relu = nn.ReLU(inplace=True)
@@ -119,28 +172,27 @@ class MultiViewResNet(nn.Module):
                 elif isinstance(m, BasicBlock):
                     nn.init.constant_(m.bn2.weight, 0)
 
-    def _make_layer(self, block, planes, blocks, stride=1, dilate=False, groups=1):
+    def _make_layer(self, block, width_per_grp, blocks, stride=1, dilate=False, groups=1):
         norm_layer = self._norm_layer
         downsample = None
         previous_dilation = self.dilation
         if dilate:
             self.dilation *= stride
             stride = 1
-        if stride != 1 or self.inplanes != self._adjust_width(planes * block.expansion, groups):
+        if stride != 1 or self.inplanes != (width_per_grp * block.expansion * self.num_views):
             downsample = nn.Sequential(
-                conv1x1(self.inplanes, self._adjust_width(planes * block.expansion, groups), stride, groups=groups),
-                norm_layer(self._adjust_width(planes * block.expansion, groups)),
+                conv1x1(self.inplanes, width_per_grp * block.expansion * self.num_views, stride, groups=groups),
+                norm_layer(width_per_grp * block.expansion * self.num_views),
             )
 
         layers = []
 
-        # inplanes, planes, stride=1, groups=None,
-        # base_width=56, dilation=1, norm_layer=None, downsample=Non
-        layers.append(block(self.inplanes, planes, stride=stride, downsample=downsample, groups=groups,
-                            base_width=self.base_width, dilation=previous_dilation, norm_layer=norm_layer))
-        self.inplanes = self._adjust_width(planes * block.expansion, self.num_views)
+        layers.append(
+            block(self.inplanes, width_per_grp, stride=stride, downsample=downsample, groups=groups,
+                  base_width=self.base_width, dilation=previous_dilation, norm_layer=norm_layer))
+        self.inplanes = layers[0].out_dims
         for _ in range(1, blocks):
-            layers.append(block(self.inplanes, planes, groups=groups,
+            layers.append(block(self.inplanes, width_per_grp, groups=groups,
                                 base_width=self.base_width, dilation=self.dilation,
                                 norm_layer=norm_layer))
 
