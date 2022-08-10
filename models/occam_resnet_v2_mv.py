@@ -146,8 +146,16 @@ def occam_resnet18_v2_rgb_gs_edge(num_classes):
     return occam_resnet_v2_mv_generic(num_classes, input_views=['rgb', 'gs', 'edge'])
 
 
+def occam_resnet18_v2_rgb_gs_edge_grp_width34(num_classes):
+    return occam_resnet_v2_mv_generic(num_classes, input_views=['rgb', 'gs', 'edge'],
+                                      width_per_group=34,
+                                      exit_width_factors=[1, 1, 1, 1],
+                                      cam_width_factors=[1, 1, 1, 1]
+                                      )
+
+
 if __name__ == "__main__":
-    m = occam_resnet18_v2_rgb_gs_edge(20)
+    m = occam_resnet18_v2_rgb_gs_edge_width(20)
     # m = occam_resnet_v2_50a(20)
     print(m)
     x = torch.rand((5, 3, 224, 224))

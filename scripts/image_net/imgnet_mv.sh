@@ -10,7 +10,7 @@ precision=16
 # res2net26_edge_gs_rgb, res2net26_rgb_gs_edge, res2net26_rgb_rgb_rgb
 # resnet26_edge_gs_rgb, resnet26_rgb_gs_edge, resnet26_rgb_rgb_rgb
 CUDA_VISIBLE_DEVICES=${GPU} python main.py \
-model.name=res2net26_edge_gs_rgb \
+model.name=resnet26_edge_gs_rgb \
 trainer=base_trainer \
 trainer.precision=${precision} \
 dataset=${dataset} \

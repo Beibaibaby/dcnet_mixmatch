@@ -1,14 +1,14 @@
 #!/bin/bash
 source activate occamnets
 
-GPU=2
+GPU=0
 
 dataset=image_net
 optim=image_net
 subset_percent=16
 precision=16
-# occam_resnet18_v2_edge_gs_rgb, occam_resnet18_v2_rgb_gs_edge
-for model in occam_resnet18_v2_rgb_rgb_rgb; do
+# occam_resnet18_v2_edge_gs_rgb, occam_resnet18_v2_rgb_gs_edge, occam_resnet18_v2_rgb_gs_edge_grp_width34
+for model in occam_resnet18_v2_rgb_gs_edge_grp_width34; do
   CUDA_VISIBLE_DEVICES=${GPU} python main.py \
   model.name=${model} \
   trainer=occam_trainer_v2 \

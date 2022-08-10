@@ -3,6 +3,7 @@ import math
 import torch.utils.model_zoo as model_zoo
 import torch
 import torch.nn.functional as F
+from models.occam_lib_v2 import MultiView
 
 # __all__ = ['Res2Net', 'res2net18_v1b', 'res2net50_v1b', 'res2net101_v1b']
 
@@ -191,11 +192,12 @@ class Bottle2neck(nn.Module):
 
 class Res2Net(nn.Module):
 
-    def __init__(self, block, layers, baseWidth=26, scale=4, num_classes=1000):
+    def __init__(self, block, layers, baseWidth=26, scale=4, num_classes=1000, input_views=['same']):
         self.inplanes = 64
         super(Res2Net, self).__init__()
         self.baseWidth = baseWidth
         self.scale = scale
+        self.input_views = input_views
         self.conv1 = nn.Sequential(
             nn.Conv2d(3, 32, 3, 2, 1, bias=False),
             nn.BatchNorm2d(32),
@@ -231,13 +233,14 @@ class Res2Net(nn.Module):
             self.inplanes = layers[-1].out_dims
         else:
             self.inplanes = planes * block.expansion
-        # self.inplanes = planes * block.expansion
+
         for i in range(1, blocks):
             layers.append(block(self.inplanes, planes, baseWidth=self.baseWidth, scale=self.scale))
 
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        x = MultiView(self.input_views)(x)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -260,8 +263,28 @@ def res2net18_v1b(num_classes, baseWidth=36):
     return model
 
 
-def res2net18_bottleneck(num_classes, baseWidth=26):
+def res2net26(num_classes, baseWidth=26):  # width = 26, but depth = 26 too since we are using Bottle2neck
     model = Res2Net(Bottle2neck, [2, 2, 2, 2], baseWidth=baseWidth, scale=4, num_classes=num_classes)
+    return model
+
+
+def res2net26_edge(num_classes, baseWidth=26):
+    return Res2Net(Bottle2neck, [2, 2, 2, 2], baseWidth=baseWidth, scale=4, num_classes=num_classes,
+                   input_views=['edge'])
+
+
+def res2net26_gs(num_classes, baseWidth=26):
+    return Res2Net(Bottle2neck, [2, 2, 2, 2], baseWidth=baseWidth, scale=4, num_classes=num_classes,
+                   input_views=['grayscale'])
+
+
+def res2net26_scale2(num_classes, baseWidth=48):
+    model = Res2Net(Bottle2neck, [2, 2, 2, 2], baseWidth=baseWidth, scale=2, num_classes=num_classes)
+    return model
+
+
+def res2net26_scale8(num_classes, baseWidth=14):
+    model = Res2Net(Bottle2neck, [2, 2, 2, 2], baseWidth=baseWidth, scale=8, num_classes=num_classes)
     return model
 
 
