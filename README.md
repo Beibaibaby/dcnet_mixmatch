@@ -22,9 +22,9 @@ Average testing accuracy of different models on RAVEN and neutral regime of PGM 
 | LEN           |        | 70.50 | 72.90  | 68.10 |
 | CoPINet       |        | 73.90 | 91.42  | 56.37 |
 | MXGNet        |        | 75.31 | 83.91  | 66.70 |
-| DCNet-RC      |        | 78.10 | 92.74  | 63.45 |
+| DCNet-RC      |        | 78.10 | 92.74  |
 | DCNet-CC      |        | 47.10 | 36.47  | 57.76 |
-| DCNet         |        |**81.08** | **93.58** | 68.57 |
+| DCNet         |        |**81.08** | **93.58
 
 # Citation
 @inproceedings{zhuo2021,  
