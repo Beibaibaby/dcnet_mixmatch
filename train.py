@@ -108,6 +108,7 @@ def data_auger(image_tensor):
     image_tensor = torch.tensor(image_tensor)
     return image_tensor
 
+
 #for data in train_loader:
 #    img,_=data[0],data[1]
 #    print(data[1])
@@ -184,22 +185,37 @@ def train(epoch):
         image, target = next(train_loader_iter)
 
         image=data_auger(image)
+
         image_unlabel, _ = next(train_unlabel_loader_iter)
         #print(image_unlabel)
-        image_unlabel = data_auger(image_unlabel)
-
+        #image_unlabel = data_auger(image_unlabel)
+        list_output_unlabel=[]
         #image_unlabel_2, _ = next(train_unlabel_loader_iter_2)
-        #for i range(args.k_aug):
+        for i in range(args.k_aug):
+            image_unlabel_temp=Variable(data_auger(image_unlabel), requires_grad=True).to(device)
+            stu_model_output = model(image_unlabel_temp)
+
+            #list_output_unlabel.append(stu_model_output)
+            if i ==0:
+                sum=stu_model_output
+            else:
+                sum=sum+stu_model_output
+
+        image_unlabel=Variable(data_auger(image_unlabel), requires_grad=True).to(device)
+        #list_output_unlabel=np.asarray(list_output_unlabel)
+        stu_model_output=sum/args.k_aug
+
+
 
         image = Variable(image, requires_grad=True).to(device)
-        image_unlabel = Variable(image_unlabel, requires_grad=True).to(device)
+
         #image_unlabel_2 = Variable(image_unlabel_2, requires_grad=True).to(device)
 
         target = Variable(target, requires_grad=False).to(device)
         
         predict = model(image)
 
-        stu_model_output = model(image_unlabel)
+        #stu_model_output = model(image_unlabel)
         #stu_model_output_2 = model(image_unlabel_2)
         #stu_model_output= (stu_model_output+stu_model_output_2)/2
         ema_model_output = ema_model(image_unlabel)
