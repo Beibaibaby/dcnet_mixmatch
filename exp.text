@@ -1,0 +1,43 @@
+python train.py     \
+--batch_size  16    --epochs  150 \
+--gpu 1 \
+--num_label_raven  20000
+
+python train.py     \
+--batch_size  16    --epochs  150 \
+--gpu 1 \
+--num_label_raven  10000
+
+python train.py     \
+--batch_size  16    --epochs  150 \
+--gpu 1 \
+--num_label_raven  5000
+
+
+python train.py     \
+--batch_size  16    --epochs  150 \
+--gpu 0 \
+--ema_loss_weight 0 \
+--num_label_raven  3000
+
+
+python train.py     \
+--batch_size  16    --epochs  150 \
+--gpu 1 \
+--ema_loss_weight 0 \
+--num_label_raven  1000
+
+
+@MT
+python train.py     \
+--batch_size  16    --epochs  150 \
+--gpu 1 \
+--ema_loss_weight 1 \
+--num_label_raven  3000
+
+
+python train.py     \
+--batch_size  16    --epochs  150 \
+--gpu 1 \
+--ema_loss_weight 1 \
+--num_label_raven  1000
