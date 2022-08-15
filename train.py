@@ -43,7 +43,7 @@ parser.add_argument('--workers', type=int, default=16)
 parser.add_argument('--seed', type=int, default=123)
 
 ### defined by ZK ###
-parser.add_argument('--num_label_raven', type=int, default=100,
+parser.add_argument('--num_label_raven', type=int, default=5000,
                         help='the number of labeled data in RAVEN dataset')
 parser.add_argument('--gpu', type=str, default=0, choices=['0', '1'])
 parser.add_argument('--ema_loss_weight', type=float, default=1)
@@ -185,12 +185,16 @@ def train(epoch):
         image, target = next(train_loader_iter)
 
         image=data_auger(image)
-
+        imageforshow=image
+        imageforshow=imageforshow.numpy()
+        print(imageforshow.shape)
+        np.save('test.npy',imageforshow)
         image_unlabel, _ = next(train_unlabel_loader_iter)
         #print(image_unlabel)
         #image_unlabel = data_auger(image_unlabel)
         list_output_unlabel=[]
         #image_unlabel_2, _ = next(train_unlabel_loader_iter_2)
+        list_stu_model_output=[]
         for i in range(args.k_aug):
             image_unlabel_temp=Variable(data_auger(image_unlabel), requires_grad=True).to(device)
             stu_model_output = model(image_unlabel_temp)
@@ -200,11 +204,16 @@ def train(epoch):
                 sum=stu_model_output
             else:
                 sum=sum+stu_model_output
-
+            list_stu_model_output.append(stu_model_output)
+            
         image_unlabel=Variable(data_auger(image_unlabel), requires_grad=True).to(device)
         #list_output_unlabel=np.asarray(list_output_unlabel)
-        stu_model_output=sum/args.k_aug
-
+        guass_label=sum/args.k_aug
+        unlabel_loss = 0
+        for stu_model_output in list_stu_model_output:
+            unlabel_loss += F.mse_loss(guass_label, stu_model_output)
+        unlabel_loss=unlabel_loss/args.k_aug
+        
 
 
         image = Variable(image, requires_grad=True).to(device)
@@ -223,7 +232,7 @@ def train(epoch):
 
         label_loss = contrast_loss(predict, target)
 
-        unlabel_loss = F.mse_loss(stu_model_output, ema_model_output)
+        #unlabel_loss = F.mse_loss(guass_label, ema_model_output)
 
         loss = label_loss + args.ema_loss_weight * unlabel_loss
 
