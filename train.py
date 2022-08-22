@@ -62,7 +62,9 @@ ncols_const = 70
 seq = iaa.Sequential([
     #iaa.Crop(px=(0, 16)), # crop images from each side by 0 to 16px (randomly chosen)
     #iaa.Fliplr(0.5), # horizontally flip 50% of the images
-    iaa.GaussianBlur(sigma=(0, 3.0)) # blur images with a sigma of 0 to 3.0
+    #iaa.GaussianBlur(sigma=(0, 3.0)) # blur images with a sigma of 0 to 3.0
+    iaa.Fliplr(0.5),
+    iaa.Flipud(0.5)
 ])
 
 def update_ema_variables(model, ema_model, alpha, global_step):
