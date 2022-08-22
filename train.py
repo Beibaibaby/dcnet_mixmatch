@@ -21,7 +21,7 @@ import pdb
 # center_single, distribute_four, distribute_nine, left_center_single_right_center_single
 # up_center_single_down_center_single, in_center_single_out_center_single, in_distribute_four_out_center_single
 
-
+visual=True
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_name', type=str, default='dcnet')
@@ -36,7 +36,7 @@ parser.add_argument('--root', type=str, default='/nfs/h1/RAVEN')
 
 parser.add_argument('--dropout', type=float, default=0.5)
 parser.add_argument('--lr', type=float, default=1e-3)
-parser.add_argument('--epochs', type=int, default=30)
+parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--img_size', type=int, default=96)
 parser.add_argument('--workers', type=int, default=16)
@@ -47,7 +47,7 @@ parser.add_argument('--num_label_raven', type=int, default=5000,
                         help='the number of labeled data in RAVEN dataset')
 parser.add_argument('--gpu', type=str, default=0, choices=['0', '1'])
 parser.add_argument('--ema_loss_weight', type=float, default=1)
-parser.add_argument('--k_aug', type=int, default=2)
+parser.add_argument('--k_aug', type=int, default=4)
 
 args = parser.parse_args()
 
@@ -60,8 +60,8 @@ tf = transforms.Compose([ToTensor()])
 ncols_const = 70
 
 seq = iaa.Sequential([
-    iaa.Crop(px=(0, 16)), # crop images from each side by 0 to 16px (randomly chosen)
-    iaa.Fliplr(0.5), # horizontally flip 50% of the images
+    #iaa.Crop(px=(0, 16)), # crop images from each side by 0 to 16px (randomly chosen)
+    #iaa.Fliplr(0.5), # horizontally flip 50% of the images
     iaa.GaussianBlur(sigma=(0, 3.0)) # blur images with a sigma of 0 to 3.0
 ])
 
@@ -185,10 +185,11 @@ def train(epoch):
         image, target = next(train_loader_iter)
 
         image=data_auger(image)
-        imageforshow=image
-        imageforshow=imageforshow.numpy()
-        print(imageforshow.shape)
-        np.save('test.npy',imageforshow)
+        if visual:
+            imageforshow = image
+            imageforshow = imageforshow.numpy()
+            print(imageforshow.shape)
+            np.save('test.npy', imageforshow)
         image_unlabel, _ = next(train_unlabel_loader_iter)
         #print(image_unlabel)
         #image_unlabel = data_auger(image_unlabel)
@@ -244,7 +245,7 @@ def train(epoch):
         optimizer.zero_grad()
 
         # update the teacher model
-        update_ema_variables(model, ema_model, 0.999, counter)
+        #update_ema_variables(model, ema_model, 0.999, counter)
 
         metrics['loss'].append(loss.item())
         metrics['correct'].append(correct)

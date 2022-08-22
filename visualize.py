@@ -21,5 +21,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 ts=np.load('test.npy')
-plt.imshow(ts[0][0])
-plt.savefig("test.pdf")
+
+for i in range(16):
+    plt.imshow(ts[0][i])
+    plt.savefig("./fig/test"+str(i)+".pdf")
